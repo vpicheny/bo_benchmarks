@@ -8,7 +8,7 @@ First step is to install Igloo. For that, first [clone the repo](https://gitlab.
 
 ```
 sudo apt-get install libblas-dev liblapack-dev
-sudo apt-get install -y openmpi-bin
+sudo apt-get install openmpi-bin
 ```
 
 Once the process is completed, you should have a directory `igloo/build` with all build artifacts, including `bin` directory where all callable executables are. Running [tests](https://gitlab.inria.fr/igloo/igloo/-/wikis/Tests) is a good way to ensure your installation process went correctly. Take a note of an absolute path to the `bin` directory.

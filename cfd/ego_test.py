@@ -28,7 +28,7 @@ def single_run(x):
     np.savetxt("design_vector_0.dat", np.insert(x, 0, len(x), axis=0))
 
     # invoke Igloo
-    subprocess.run(["./Pb_test/run.sh"])
+    subprocess.run(["./Pb_test/run.sh"], cwd="./Pb_test")
 
     # both files looks like this:
     # 1
