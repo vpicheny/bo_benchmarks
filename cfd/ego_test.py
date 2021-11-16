@@ -25,7 +25,7 @@ def single_run(x):
 
     # first line is the number of elements
     # then one element per line
-    np.savetxt("design_vector_0.dat", np.insert(x, 0, len(x), axis=0))
+    np.savetxt("./Pb_test/design_vector_0.dat", np.insert(x, 0, len(x), axis=0))
 
     # invoke Igloo
     subprocess.run(["./run.sh"], cwd="./Pb_test")
@@ -38,14 +38,14 @@ def single_run(x):
     # Meaning of first two lines isn't clear, last line is the value we need
     # Last line can sometimes be missing, or NaN, which means what exactly?
     
-    with open('simulation_result_0.dat') as output_file:
+    with open('./Pb_test/simulation_result_0.dat') as output_file:
         all_lines = output_file.readlines()
         if len(all_lines) != 3:
             objective_value = None
         else:
             objective_value = try_get_number(all_lines[-1])
 
-    with open('simulation_result_1.dat') as output_file:
+    with open('./Pb_test/simulation_result_1.dat') as output_file:
         all_lines = output_file.readlines()
         if len(all_lines) != 3:
             constraint_value = None
