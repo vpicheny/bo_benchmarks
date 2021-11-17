@@ -54,13 +54,15 @@ class IglooSimulationRunner():
 
 
     def try_get_value(self, simulation_output_filename):
-        # both simlation_result_X.dat files looks like this:
+        # both simulation_result_X.dat files look like this:
         # 1
         # 0|1
         # 0.123456789
         #
         # Meaning of first two lines isn't clear, last line is the value we need
-        # Last line can sometimes be missing, or NaN, which means what exactly?
+
+        # Open question: last line can sometimes be missing, or NaN, which means what exactly?
+        # we treat this as failure for now
         with open(self.get_file_path(simulation_output_filename)) as output_file:
             all_lines = output_file.readlines()
             if len(all_lines) != 3:
@@ -128,11 +130,11 @@ def observer(query_points):
         ov, cv = igloo_cfd(point)
         if ov is None or cv is None:
             # can one be None but not the other? what to do if that happens?
-            failure_values.append(0.0)
+            failure_values.append([0.0])
         else:
-            failure_values.append(1.0)
-            objective_values.append(ov)
-            constraint_values.append(cv)
+            failure_values.append([1.0])
+            objective_values.append([ov])
+            constraint_values.append([cv])
 
     return {
         OBJECTIVE: Dataset(query_points, tf.convert_to_tensor(objective_values, dtype=tf.float64)),
