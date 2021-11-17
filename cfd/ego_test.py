@@ -14,7 +14,7 @@ import gpflow
 
 def try_get_number(s):
     try:
-        float(s)
+        return float(s)
     except ValueError:
         return None
 
@@ -53,6 +53,24 @@ class IglooSimulationRunner():
         return os.path.join(self.base_dir, filename)
 
 
+    def try_get_value(self, simulation_output_filename):
+        # both simlation_result_X.dat files looks like this:
+        # 1
+        # 0|1
+        # 0.123456789
+        #
+        # Meaning of first two lines isn't clear, last line is the value we need
+        # Last line can sometimes be missing, or NaN, which means what exactly?
+        with open(self.get_file_path(simulation_output_filename)) as output_file:
+            all_lines = output_file.readlines()
+            if len(all_lines) != 3:
+                value = None
+            else:
+                value = try_get_number(all_lines[-1])
+
+            return value
+
+
     def __call__(self, x):
         """Single run of the Igloo CFD
         """
@@ -73,27 +91,8 @@ class IglooSimulationRunner():
         # invoke Igloo
         subprocess.run(["./run.sh", "--igloo-path", self._igloo_bin_path, "--data-dir", self.base_dir], cwd="Pb_test")
 
-        # both files looks like this:
-        # 1
-        # 0
-        # 0.123456789
-        #
-        # Meaning of first two lines isn't clear, last line is the value we need
-        # Last line can sometimes be missing, or NaN, which means what exactly?
-        
-        with open(self.get_file_path('simulation_result_0.dat')) as output_file:
-            all_lines = output_file.readlines()
-            if len(all_lines) != 3:
-                objective_value = None
-            else:
-                objective_value = try_get_number(all_lines[-1])
-
-        with open(self.get_file_path('simulation_result_1.dat')) as output_file:
-            all_lines = output_file.readlines()
-            if len(all_lines) != 3:
-                constraint_value = None
-            else:
-                constraint_value = try_get_number(all_lines[-1])
+        objective_value = self.try_get_value('simulation_result_0.dat')
+        constraint_value = self.try_get_value('simulation_result_1.dat')
 
         return objective_value, constraint_value
 
