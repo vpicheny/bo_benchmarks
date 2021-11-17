@@ -77,7 +77,7 @@ fi
 LREF=0.125
 
 FUNCT=`echo print $DRAG | perl`
-CONST=`echo print $LREF-$LIFT | perl`
+CONST=`echo print $LREF - $LIFT | perl`
 
 ######## write file for optimizer #################
 
