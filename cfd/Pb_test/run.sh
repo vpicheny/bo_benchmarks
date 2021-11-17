@@ -1,5 +1,62 @@
 #!/bin/bash
 
+help()
+{
+    echo
+    echo "Single run of a CFD simulation"
+    echo
+    echo "Syntax: run.sh -i|--igloo-path <path> -d|--data-dir <path>"
+    echo "options:"
+    echo "i, igloo-path      Path to igloo bin directory"
+    echo "d, data-dir        Path to directory for data files."
+    echo "h, help            Print this message."
+    echo
+}
+
+# parse input arguments
+# source: https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+    -h|--help)
+        help
+        exit 0
+        ;;
+    -i|--igloo-path)
+        IGLOOPATH="$2"
+        shift # past argument
+        shift # past value
+        ;;
+    -d|--data-dir)
+        DATA_DIR="$2"
+        shift # past argument
+        shift # past value
+        ;;
+    *)
+        echo "Unknown parameter passed: $1"
+        help
+        exit 1
+    esac
+done
+
+if [ -z "$IGLOOPATH" ]; then
+    echo "Path to Igloo executables is not set"
+    help
+    exit 1
+fi
+
+if [ -z "$DATA_DIR" ]; then
+    echo "Path to directory for data is not set, assuming current directory"
+    DATA_DIR="."
+fi
+
+cp baseline.dat $DATA_DIR
+cp box.dat $DATA_DIR
+
+cd $DATA_DIR  # current path: $DATA_DIR
+
 ############ get design parameters from file #######
 
 U1=`cat design_vector_0.dat | awk 'NR==2'`
@@ -23,7 +80,7 @@ D8=`cat design_vector_0.dat | awk 'NR==17'`
 
 ############ set simulation parameters #######
 
-IGLOOPATH='~/projects/igloo_cfd/igloo/build/bin'
+#IGLOOPATH='~/projects/igloo_cfd/igloo/build/bin'
 PROCS=16
 
 LEVEL=2  # between 0 and 5
@@ -39,7 +96,7 @@ GAUSS=`echo print $DEGREE + 1 | perl`
 
 rm -rf Eval
 mkdir Eval
-cd Eval
+cd Eval  # current path: $DATA_DIR/Eval
 
 cp ../baseline.dat .
 cp ../box.dat .
@@ -91,7 +148,7 @@ echo $CONST >> simulation_result_1.dat
 
 mv simulation_result_0.dat ../
 mv simulation_result_1.dat ../
-cd ../
+cd ../  # current path: $DATA_DIR
 
 ################# save data ############
 
