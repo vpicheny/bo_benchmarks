@@ -1,0 +1,1 @@
+This run result contains example of initial data for BO. It was generated using default Igloo settings (see run.sh code), and constains 29 good evaluation points and 3 failure points
