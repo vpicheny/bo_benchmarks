@@ -151,8 +151,8 @@ search_space = trieste.space.Box(
 
 ######### Collecting initial data ###############
 
-# num_initial_points = search_space.dimension  # R code uses twice that
-num_initial_points = 3
+num_initial_points = 2 * search_space.dimension  # R code uses twice that
+# num_initial_points = 3
 initial_query_points = search_space.sample(num_initial_points)
 
 start = timeit.default_timer()

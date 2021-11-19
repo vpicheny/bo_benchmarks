@@ -130,3 +130,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Eval folders from Igloo
+Eval/
+Eval_*/
