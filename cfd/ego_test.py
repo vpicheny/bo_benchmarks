@@ -4,13 +4,15 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("igloo_bin_path", type=str, help="Path to Igloo bin directory. Required.")
 parser.add_argument("--init-data-path", type=str, default=None, help="Path to optim.dat file that shall be used for initial data. If not given, new initial data is generated.")
-parser.add_argument("--n-init-points", type=int, default=None, help="Nummber of initial points to generate. Defaults to (2 * number of parameters). Ignored if path to initial data is given.")
+parser.add_argument("--n-init-points", type=int, default=None, help="Number of initial points to generate. Defaults to (2 * number of parameters). Ignored if path to initial data is given.")
+parser.add_argument("--n-bo-steps", type=int, default=10, help="Number of Bayesian optimization steps. Defaults to 10.")
 
 args = parser.parse_args()
 
 igloo_bin_path = args.igloo_bin_path
 init_data_path = args.init_data_path  # None if not given
 n_init_points = args.n_init_points  # None if not given
+n_bo_steps = args.n_bo_steps
 
 
 ######## imports, boilerplate code to work with Igloo ###########
@@ -36,6 +38,10 @@ from trieste.data import Dataset
 OBJECTIVE = "OBJECTIVE"
 CONSTRAINT = "CONSTRAINT"
 FAILURE = "FAILURE"
+
+# this follows Pb_test/ego.r
+# g(x) <= 0, according to https://rdrr.io/cran/DiceOptim/man/EGO.cst.html
+CONSTRAINT_THRESHOLD = 0.0
 
 
 def observer(query_points):
@@ -146,3 +152,65 @@ else:
 print("Initial data:")
 for tag in initial_data:
     print(f"{tag}: {len(initial_data[tag])} points")
+
+################ Models and acquisitions for BO ##################
+# we don't build model to handle failures for now
+# see run.sh code for presumably failure-free Igloo setup
+initial_data = {
+    OBJECTIVE: initial_data[OBJECTIVE],
+    CONSTRAINT: initial_data[CONSTRAINT]
+}
+
+def observer_fail_free(x):
+    datasets = observer(x)
+
+    return {
+        OBJECTIVE: datasets[OBJECTIVE],
+        CONSTRAINT: datasets[CONSTRAINT]
+    }
+
+def create_model(dataset, variance=None):
+    if variance is None:
+        variance = tf.math.reduce_variance(dataset.observations)
+    lengthscale = 0.01 * np.ones(search_space.dimension, dtype=np.float64)
+    kernel = gpflow.kernels.Matern52(variance=variance, lengthscales=lengthscale)
+    jitter = gpflow.kernels.White(1e-12)
+    gpr = gpflow.models.GPR(dataset.astuple(), kernel + jitter, noise_variance=1e-5)
+    gpflow.set_trainable(gpr.likelihood, False)
+    return trieste.models.create_model(trieste.models.gpflow.GPflowModelConfig(**{
+        "model": gpr,
+        "optimizer": gpflow.optimizers.Scipy(),
+        "optimizer_args": {
+            "minimize_args": {"options": dict(maxiter=100)},
+        },
+    }))
+
+variance = tf.math.reduce_variance(initial_data[OBJECTIVE].observations)
+models = {
+    OBJECTIVE: create_model(initial_data[OBJECTIVE], variance),
+    CONSTRAINT: create_model(initial_data[CONSTRAINT], variance)
+}
+
+pof = trieste.acquisition.ProbabilityOfFeasibility(threshold=CONSTRAINT_THRESHOLD)
+eci = trieste.acquisition.ExpectedConstrainedImprovement(
+    OBJECTIVE, pof.using(CONSTRAINT)
+)
+rule = trieste.acquisition.rule.EfficientGlobalOptimization(eci)
+
+
+############# BO run ###############
+print(f"Running optimization for {n_bo_steps} steps")
+bo = trieste.bayesian_optimizer.BayesianOptimizer(observer_fail_free, search_space)
+
+result, history = bo.optimize(n_bo_steps, initial_data, models, rule).astuple()
+
+result_file = igloo_cfd.get_file_path("result.pickle")
+history_file = igloo_cfd.get_file_path("history.pickle")
+
+import pickle
+
+with open(result_file, 'wb') as f:
+    pickle.dump(result, f)
+
+with open(history_file, 'wb') as f:
+    pickle.dump(history, f)

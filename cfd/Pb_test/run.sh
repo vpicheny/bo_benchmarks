@@ -83,10 +83,17 @@ D8=`cat design_vector_0.dat | awk 'NR==17'`
 #IGLOOPATH='~/projects/igloo_cfd/igloo/build/bin'
 PROCS=16
 
-LEVEL=2  # between 0 and 5
-DEGREE=3 # between 3 and 5
-SHOCK=1. # between 0. and 5.
-CFL=0.9  # between 0. and 1.
+# default settings
+# LEVEL=2  # between 0 and 5
+# DEGREE=3 # between 3 and 5
+# SHOCK=1. # between 0. and 5.
+# CFL=0.9  # between 0. and 1.
+
+# settings that are not as useful but eliminate crashes
+LEVEL=2
+DEGREE=3
+SHOCK=2.
+CFL=0.5
 
 ############ other dependent parameters #######
 
