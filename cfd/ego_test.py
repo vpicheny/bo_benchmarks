@@ -2,9 +2,11 @@
 import argparse
 parser = argparse.ArgumentParser()
 
-parser.add_argument("igloo_bin_path", type=str, help="Path to Igloo bin directory. Required.")
+parser.add_argument("--igloo-bin-path", type=str, required=True, help="Path to Igloo bin directory. Required.")
 parser.add_argument("--init-data-path", type=str, default=None, help="Path to optim.dat file that shall be used for initial data. If not given, new initial data is generated.")
-parser.add_argument("--n-init-points", type=int, default=None, help="Number of initial points to generate. Defaults to (2 * number of parameters). Ignored if path to initial data is given.")
+parser.add_argument("--n-init-points", type=int, default=None, help="""Number of initial points to use. Defaults to (2 * number of input parameters).
+                                                                       If --init-data-path is specified - max number of points to use from the given path (all points by default).
+                                                                       If --init-data-path is not specified - number of points to generate by calling Igloo with random inputs ( by default).""")
 parser.add_argument("--n-bo-steps", type=int, default=10, help="Number of Bayesian optimization steps. Defaults to 10.")
 
 args = parser.parse_args()
@@ -79,7 +81,7 @@ search_space = trieste.space.Box(
 
 ######### Collecting initial data ###############
 
-def read_run_data(optim_dat_path):
+def read_run_data(optim_dat_path, max_points=None):
     """Given a path to optim.dat file that contains data for a series of Igloo runs
     returns a dictionary of Trieste datasets built from that data.
 
@@ -94,6 +96,9 @@ def read_run_data(optim_dat_path):
 
     with open(optim_dat_path) as f:
         all_lines = f.readlines()
+
+    if max_points is not None:
+        all_lines = all_lines[:max_points]
 
     objective_values = []
     constraint_values = []
@@ -146,7 +151,7 @@ if init_data_path is None:
     print(f"Time for initial points: {stop - start:.0f}s")
 else:
     # read existing initial data
-    initial_data = read_run_data(init_data_path)
+    initial_data = read_run_data(init_data_path, max_points=n_init_points)
     num_initial_points = len(initial_data[FAILURE])  # failure dataset contains all points, unlike other two
 
 print("Initial data:")
@@ -169,14 +174,13 @@ def observer_fail_free(x):
         CONSTRAINT: datasets[CONSTRAINT]
     }
 
-def create_model(dataset, variance=None):
-    if variance is None:
-        variance = tf.math.reduce_variance(dataset.observations)
+def create_model(dataset):
+    variance = tf.math.reduce_variance(dataset.observations)
     lengthscale = 0.01 * np.ones(search_space.dimension, dtype=np.float64)
     kernel = gpflow.kernels.Matern52(variance=variance, lengthscales=lengthscale)
     jitter = gpflow.kernels.White(1e-12)
     gpr = gpflow.models.GPR(dataset.astuple(), kernel + jitter, noise_variance=1e-5)
-    gpflow.set_trainable(gpr.likelihood, False)
+    # gpflow.set_trainable(gpr.likelihood, False)
     return trieste.models.create_model(trieste.models.gpflow.GPflowModelConfig(**{
         "model": gpr,
         "optimizer": gpflow.optimizers.Scipy(),
@@ -185,10 +189,9 @@ def create_model(dataset, variance=None):
         },
     }))
 
-variance = tf.math.reduce_variance(initial_data[OBJECTIVE].observations)
 models = {
-    OBJECTIVE: create_model(initial_data[OBJECTIVE], variance),
-    CONSTRAINT: create_model(initial_data[CONSTRAINT], variance)
+    OBJECTIVE: create_model(initial_data[OBJECTIVE]),
+    CONSTRAINT: create_model(initial_data[CONSTRAINT])
 }
 
 pof = trieste.acquisition.ProbabilityOfFeasibility(threshold=CONSTRAINT_THRESHOLD)
