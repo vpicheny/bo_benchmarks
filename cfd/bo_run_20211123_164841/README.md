@@ -1,3 +1,9 @@
-In this run we fix the issue with prior variance introduced in the previous run, and as a result get a lot more evaluations that respect the constraint. Nevertheless, the model is still isn't perfect, as the model failed due to numerical stability on BO step 66.
+This run was done from scratch using following settings in `run.sh`:
+```
+LEVEL=2
+DEGREE=3
+SHOCK=2.
+CFL=0.5
+```
 
-Run uses safe settings in `run.sh`.
+In this run we fix an issue with initial variance for the constraint model. Unfortunately it still does not quite solve the issue of many evaluations not respecting the constraint. In addition, the model inversion failed at BO step 66 due to numerical instability.

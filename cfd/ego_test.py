@@ -78,6 +78,7 @@ search_space = trieste.space.Box(
     [0.05, 0.08, 0.10, 0.10, 0.10, 0.08, 0.07,  0.05, -0.02, -0.02, -0.03, -0.03, -0.03, -0.01,  0.00,  0.00]
 )
 
+n_init_points = 2 * search_space.dimension if n_init_points is None else n_init_points
 
 ######### Collecting initial data ###############
 
@@ -141,7 +142,7 @@ def read_run_data(optim_dat_path, max_points=None):
 
 if init_data_path is None:
     # generate new initial data
-    num_initial_points = 2 * search_space.dimension if n_init_points is None else n_init_points
+    num_initial_points = n_init_points
     initial_query_points = search_space.sample(num_initial_points)
 
     start = timeit.default_timer()
