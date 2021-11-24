@@ -25,9 +25,9 @@ import os
 
 
 import tensorflow as tf
-import trieste
+import tensorflow_probability as tfp
 import gpflow
-
+import trieste
 
 
 from igloo_simulation import IglooSimulationRunner
@@ -177,11 +177,16 @@ def observer_fail_free(x):
 
 def create_model(dataset):
     variance = tf.math.reduce_variance(dataset.observations)
-    lengthscale = 0.01 * np.ones(search_space.dimension, dtype=np.float64)
-    kernel = gpflow.kernels.Matern52(variance=variance, lengthscales=lengthscale)
-    jitter = gpflow.kernels.White(1e-12)
-    gpr = gpflow.models.GPR(dataset.astuple(), kernel + jitter, noise_variance=1e-5)
-    # gpflow.set_trainable(gpr.likelihood, False)
+    lengthscales = 0.01 * np.ones(search_space.dimension, dtype=np.float64)
+    kernel = gpflow.kernels.Matern52(variance, lengthscales)
+    scale = tf.constant(1.0, dtype=tf.float64)
+    kernel.variance.prior = tfp.distributions.LogNormal(
+        tf.constant(-2.0, dtype=tf.float64), scale
+    )
+    kernel.lengthscales.prior = tfp.distributions.LogNormal(
+        tf.math.log(kernel.lengthscales), scale
+    )
+    gpr = gpflow.models.GPR(dataset.astuple(), kernel, noise_variance=1e-5)
     return trieste.models.create_model(trieste.models.gpflow.GPflowModelConfig(**{
         "model": gpr,
         "optimizer": gpflow.optimizers.Scipy(),
