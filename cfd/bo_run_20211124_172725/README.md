@@ -1,0 +1,1 @@
+This run was generated with fail-safe settings in `run.sh`, using results on one of `bo_run_20211119_162024` to seed the initial data prior to optimization. This run completed all 120 iterations without errors, and most of optimization steps respect the constraints
