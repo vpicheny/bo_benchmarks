@@ -50,11 +50,11 @@ def dict_product(dicts):
 
 
 def make_all_configs():
-    initial_budget_per_dimension = [40]
+    initial_budget_per_dimension = [100]
     seeds = np.arange(10)
-    problems = ['hartmann_3', "gauss_noise_branin", "exp_noise_branin"]  #["exp_noise_branin"]  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
-    batch_sizes = [10]
-    budgets_per_dimension = [120]
+    problems = ["exp_noise_branin"]  #["flat_branin_noise", 'hartmann_3', "gauss_noise_branin", "exp_noise_branin"]  #["exp_noise_branin"]  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
+    batch_sizes = [50]
+    budgets_per_dimension = [400]
     num_features = [1000]
     models = ["quantile"]  #["hetgp", 'GPR']  #["hetgp", "quantile", "GPR"]
 

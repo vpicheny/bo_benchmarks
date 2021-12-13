@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
-from trieste.objectives import scaled_branin, hartmann_3
+from trieste.objectives import scaled_branin, hartmann_3, SCALED_BRANIN_MINIMUM
 from trieste.space import Box
 
 
@@ -18,7 +18,7 @@ def get_problem(name):
     problem = Problem
     if name == "gauss_noise_branin":
         noise = .1
-        quantile_level = 0.9
+        quantile_level = 0.75
 
         beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
 
@@ -94,6 +94,30 @@ def get_problem(name):
         problem.quantile_fun = quantile_fun
         problem.quantile_level = quantile_level
         problem.dim = 3
+        problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 1000000)
+        return problem
+
+    elif name == "flat_branin_noise":
+        quantile_level = 0.9
+
+        beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
+
+        def noise_sd(x):
+            return (scaled_branin(x) - SCALED_BRANIN_MINIMUM) + 0.1
+
+        def fun(x):
+            zeros = tf.zeros_like(x[:, 0:1])
+            return zeros + tf.random.normal(zeros.shape, stddev=noise_sd(x), dtype=x.dtype)
+
+        def quantile_fun(x):
+            return beta * noise_sd(x)
+
+        problem.lower_bounds = [0., 0.]
+        problem.upper_bounds = [1., 1.]
+        problem.fun = fun
+        problem.quantile_fun = quantile_fun
+        problem.quantile_level = quantile_level
+        problem.dim = 2
         problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 1000000)
         return problem
 

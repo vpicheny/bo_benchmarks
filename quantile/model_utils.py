@@ -39,17 +39,16 @@ def build_model(data, CONFIG, search_space):
     if CONFIG.model == "quantile":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
-                                     likelihood_distribution=lambda loc, scale: ASymmetricLaplace(loc, scale, tau=.1),
+                                     likelihood_distribution=
+                                     lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
                                      num_inducing_points=CONFIG.num_inducing_points,
-                                     inducing_point_selector=KMeans(search_space),
-                                     quantile_level=CONFIG.problem.quantile_level)
+                                     inducing_point_selector=KMeans(search_space))
     elif CONFIG.model == "hetgp":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
                                      likelihood_distribution=tfp.distributions.Normal,
                                      num_inducing_points=CONFIG.num_inducing_points,
-                                     inducing_point_selector=KMeans(search_space),
-                                     quantile_level=CONFIG.problem.quantile_level)
+                                     inducing_point_selector=KMeans(search_space))
     elif CONFIG.model == "GPR":
         return build_quantile_gpr_model(data,
                                         batch_size=CONFIG.batch_size,
@@ -257,10 +256,10 @@ def create_kernel_with_features(var, input_dim, num_features):
     return KernelWithFeatureDecomposition(kernel, features, coefficients)
 
 def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_inducing_points,
-                          inducing_point_selector, quantile_level):
+                          inducing_point_selector):
     num_data, input_dim = data.query_points.shape
     var = tf.math.reduce_variance(data.observations)
-    kernel_with_features1 =create_kernel_with_features(var, input_dim, num_features)
+    kernel_with_features1 = create_kernel_with_features(var / 2., input_dim, num_features)
     kernel_with_features2 = create_kernel_with_features(var / 2., input_dim, num_features)
     kernel_list = [kernel_with_features1, kernel_with_features2]
     kernel = gpflux.helpers.construct_basic_kernel(kernel_list)
@@ -274,24 +273,16 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     layer = gpflux.layers.GPLayer(kernel, inducing_variable, num_data, whiten=False, num_latent_gps=2,
                                   mean_function=gpflow.mean_functions.Constant(np.zeros([1, 2])))
 
-    if quantile_level is not None:
-        likelihood = gpflow.likelihoods.HeteroskedasticTFPConditional(
-            distribution_class=likelihood_distribution,
-            scale_transform=tfp.bijectors.Exp(),
-            # tau=quantile_level  # TODO: make this less ugly
+    likelihood = gpflow.likelihoods.HeteroskedasticTFPConditional(
+        distribution_class=likelihood_distribution,
+        scale_transform=tfp.bijectors.Exp(),
     )
-    else:
-        likelihood = gpflow.likelihoods.HeteroskedasticTFPConditional(
-            distribution_class=likelihood_distribution,
-            scale_transform=tfp.bijectors.Exp(),
-        )
 
     likelihood_layer = gpflux.layers.LikelihoodLayer(likelihood)
     model = gpflux.models.DeepGP([layer], likelihood_layer)
 
-    epochs = 2000
+    epochs = 5000
     batch_size = 200
-
 
     callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=1, min_lr=1e-6),
         tf.keras.callbacks.EarlyStopping(monitor="loss", patience=50, min_delta=0.01, verbose=0, mode="min"),]
@@ -302,7 +293,7 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         "verbose": 0,
         "callbacks": callbacks,
     }
-    optimizer = Optimizer(tf.optimizers.Adam(0.05), fit_args)
+    optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
     return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, fit_args=fit_args,
                                   inducing_point_selector=inducing_point_selector)
 
@@ -418,12 +409,6 @@ def set_kernel(var, input_dim):
     prior_scale = tf.cast(1.0, dtype=tf.float64)
     kernel.variance.prior = tfp.distributions.LogNormal(tf.cast(0.0, dtype=tf.float64), prior_scale)
     kernel.lengthscales.prior = tfp.distributions.LogNormal(tf.math.log(kernel.lengthscales), prior_scale)
-
-    # low = tf.constant(0.1 * np.ones([input_dim,]), dtype=tf.float64)
-    # high = tf.constant(np.ones([input_dim,]), dtype=tf.float64)
-    # ls_transform = tfp.bijectors.Sigmoid(low=low, high=high)
-    # kernel.lengthscales = gpflow.Parameter(kernel.lengthscales, transform=ls_transform)
-
     return kernel
 
 def aggregate_data(data, batch_size, quantile_level):
