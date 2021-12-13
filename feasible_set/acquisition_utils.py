@@ -5,6 +5,7 @@ from trieste.acquisition.function import (
     ExpectedFeasibility,
     IntegratedVarianceReduction,
     LocalPenalization,
+    Fantasizer,
 )
 
 
@@ -13,10 +14,16 @@ def create_acquisition_rule(CONFIG, search_space):
         return EfficientGlobalOptimization(ExpectedFeasibility(threshold=CONFIG.problem.threshold))
 
     elif CONFIG.rule == "lp-ranjan":
-        local_penalization_acq = LocalPenalization(search_space,
-                                                   base_acquisition_function_builder=ExpectedFeasibility(threshold=CONFIG.problem.threshold))
+        acq = LocalPenalization(search_space,
+                                base_acquisition_function_builder=ExpectedFeasibility(threshold=CONFIG.problem.threshold))
         return EfficientGlobalOptimization(  # type: ignore
-            num_query_points=CONFIG.batch_size, builder=local_penalization_acq
+            num_query_points=CONFIG.batch_size, builder=acq
+        )  # TODO: this doesn't work
+
+    elif CONFIG.rule == "kb-ranjan":
+        acq = Fantasizer(ExpectedFeasibility(threshold=CONFIG.problem.threshold))
+        return EfficientGlobalOptimization(  # type: ignore
+            num_query_points=CONFIG.batch_size, builder=acq
         )
 
     elif CONFIG.rule == "evr":

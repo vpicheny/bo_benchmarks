@@ -7,7 +7,7 @@ import numpy as np
 @dataclass
 class CONFIG:
     problem_name:str  # "branin_large_volume" or ....
-    rule: str  # "nobatch-ranjan", "evr", "lp-ranjan"
+    rule: str  # "nobatch-ranjan", "evr",  "lp-ranjan" ["lp-ranjan" doesn't work atm]
     problem = None
     seed:int
     budget:int = None
@@ -50,7 +50,7 @@ def make_all_configs():
     seeds = np.arange(3)
     problems = ["branin_large_volume"]
     batch_sizes = [3]
-    rules = ["nobatch-ranjan", "evr", "lp-ranjan"]
+    rules = ["kb-ranjan"]  # ["nobatch-ranjan", "evr", "kb-ranjan"]
 
     return list(dict_product(dict(
                                   seed=seeds,
