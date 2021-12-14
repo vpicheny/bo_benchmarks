@@ -3,6 +3,7 @@ from __future__ import annotations
 from trieste.acquisition.rule import EfficientGlobalOptimization
 from trieste.acquisition.function import (
     ExpectedFeasibility,
+    ExpectedImprovement,
     IntegratedVarianceReduction,
     LocalPenalization,
     Fantasizer,

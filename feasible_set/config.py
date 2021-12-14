@@ -25,6 +25,8 @@ def make_config(args):
 
     config.exp_name = f"problem_{config.problem_name}" \
                       f"rule_{config.rule}" \
+                      f"_init_{config.initial_budget_per_dimension}" \
+                      f"_budget_{config.budget_per_dimension}" \
                       f"_batch_{config.batch_size}" \
                       f"_seed_{config.seed}"
 
@@ -47,12 +49,15 @@ def dict_product(dicts):
 
 
 def make_all_configs():
+    initial_budget_per_dimension = [5]
+    budgets_per_dimension = [10]
     seeds = np.arange(3)
     problems = ["branin_large_volume"]
     batch_sizes = [3]
-    rules = ["kb-ranjan"]  # ["nobatch-ranjan", "evr", "kb-ranjan"]
+    rules = ["lp-ranjan"]  # ["nobatch-ranjan", "evr", "kb-ranjan"]
 
-    return list(dict_product(dict(
+    return list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
+                                  budget_per_dimension=budgets_per_dimension,
                                   seed=seeds,
                                   problem_name=problems,
                                   batch_size=batch_sizes,
