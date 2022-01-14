@@ -29,21 +29,30 @@ from trieste.types import TensorType
 from trieste.models.gpflow import VariationalGaussianProcess
 from trieste.models.optimizer import Optimizer, BatchOptimizer
 
+from trieste.logging import get_step_number, get_tensorboard_writer
+
 from typing import Callable, Dict, Any, Optional
 from inducing_point_selector import InducingPointSelector, KMeans
 
 tf.keras.backend.set_floatx("float64")
 
 
-def build_model(data, CONFIG, search_space):
+def build_model(data, CONFIG, search_space, tb=None):
     if CONFIG.model == "quantile":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
                                      likelihood_distribution=
                                      lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
                                      num_inducing_points=CONFIG.num_inducing_points,
-                                     inducing_point_selector=KMeans(search_space))
+                                     inducing_point_selector=KMeans(search_space),
+                                     tb_callback=tb)
     elif CONFIG.model == "hetgp":
+        return build_hetgp_rff_model(data=data,
+                                     num_features=CONFIG.num_features,
+                                     likelihood_distribution=tfp.distributions.Normal,
+                                     num_inducing_points=CONFIG.num_inducing_points,
+                                     inducing_point_selector=KMeans(search_space))
+    elif CONFIG.model == "homgp":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
                                      likelihood_distribution=tfp.distributions.Normal,
@@ -168,7 +177,6 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
     def __init__(self,
                  model: DeepGP,
                  optimizer: tf.optimizers.Optimizer | None = None,
-                 fit_args: Dict[str, Any] | None = None,
                  inducing_point_selector: InducingPointSelector = None,
                  ):
 
@@ -177,6 +185,12 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
         if inducing_point_selector is None:
             inducing_point_selector = KMeans
         self._inducing_point_selector = inducing_point_selector
+
+        self.loss_step = 0
+
+    def __repr__(self) -> str:
+        """"""
+        return f"FeaturedHetGPFluxModel({self.model_gpflux!r}, {self.optimizer.optimizer!r})"
 
     def sample_trajectory(self) -> Callable:
         return sample_dgp(self.model_gpflux)
@@ -230,13 +244,15 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
             jitter = 1e-6
 
             if layer.whiten:
-                f_mu, f_cov = self.predict_joint(Z)  # [N, L], [L, N, N]
-                Knn = layer.kernel(Z, full_cov=True)  # [N, N]
+                f_mu, f_cov = layer.predict(Z, full_cov=True)  # [N, L], [L, N, N]
+                Knn = layer.kernel(Z, full_cov=True, full_output_cov=False)  # [L, N, N]
                 jitter_mat = jitter * tf.eye(num_inducing, dtype=Knn.dtype)
-                Lnn = tf.linalg.cholesky(Knn + jitter_mat)  # [N, N]
-                new_q_mu = tf.linalg.triangular_solve(Lnn, f_mu)  # [N, L]
-                tmp = tf.linalg.triangular_solve(Lnn[None], f_cov)  # [L, N, N], L⁻¹ f_cov
-                S_v = tf.linalg.triangular_solve(Lnn[None], tf.linalg.matrix_transpose(tmp))  # [L, N, N]
+                Lnn = tf.linalg.cholesky(Knn + jitter_mat)  # [L, N, N]
+
+                new_q_mu = tf.linalg.triangular_solve(Lnn, tf.expand_dims(tf.transpose(f_mu), -1))  # [L, N, 1]
+                new_q_mu = tf.transpose(tf.squeeze(new_q_mu, -1))  # [N, L]
+                tmp = tf.linalg.triangular_solve(Lnn, f_cov)  # [L, N, N], L⁻¹ f_cov
+                S_v = tf.linalg.triangular_solve(Lnn, tf.linalg.matrix_transpose(tmp))  # [L, N, N]
                 new_q_sqrt = tf.linalg.cholesky(S_v + jitter_mat)  # [L, N, N]
             else:
                 new_q_mu, new_f_cov = layer.predict(Z, full_cov=True)  # [N, L], [L, N, N]
@@ -247,6 +263,48 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
             layer.q_sqrt.assign(new_q_sqrt)
             layer.inducing_variable.inducing_variable.Z.assign(Z)
 
+    def log(self) -> None:
+        """
+        Log model-specific information at a given optimization step.
+        """
+        summary_writer = get_tensorboard_writer()
+
+
+        if summary_writer:
+            with summary_writer.as_default(step=trieste.logging.get_step_number()):
+                layer = self.model_gpflux.f_layers[0]
+
+                lengthscales_f = layer.kernel.kernels[0]._kernel.lengthscales
+                lengthscales_g = layer.kernel.kernels[1]._kernel.lengthscales
+                variance_f = layer.kernel.kernels[0]._kernel.variance
+                variance_g = layer.kernel.kernels[1]._kernel.variance
+
+                tf.summary.scalar("kernel.variance.f", variance_f)
+                tf.summary.scalar("kernel.variance.g", variance_g)
+                for i, lengthscalef in enumerate(lengthscales_f):
+                    tf.summary.scalar(f"kernel.lengthscale.f.{i}", lengthscalef)
+                for i, lengthscaleg in enumerate(lengthscales_g):
+                    tf.summary.scalar(f"kernel.lengthscale.g.{i}", lengthscaleg)
+
+                mean_q_mu = tf.reduce_mean(layer.q_mu, axis=0)
+                mean_q_sqrt = tf.reduce_mean(tf.linalg.diag_part(layer.q_sqrt), axis=0)
+                tf.summary.scalar(f"q_mu.f", mean_q_mu[0])
+                tf.summary.scalar(f"q_mu.g", mean_q_mu[1])
+                tf.summary.scalar(f"diag.q_sqrt.f", mean_q_sqrt[0])
+                tf.summary.scalar(f"diag.q_sqrt.g", mean_q_sqrt[1])
+
+                # tf.summary.histogram(f"q_mu.h.f", layer.q_mu[:, 0])
+                # tf.summary.histogram(f"q_mu.h.g", layer.q_mu[:, 1])
+                # tf.summary.histogram(f"q_sqrt.h.f", tf.linalg.diag_part(layer.q_sqrt)[:, 0])
+                # tf.summary.histogram(f"q_sqrt.h.g", tf.linalg.diag_part(layer.q_sqrt)[:, 1])
+
+                loss = self.model_keras.history.history['loss']
+                for i, l in enumerate(loss):
+                    tf.summary.scalar(f"loss", l, step=self.loss_step + i)
+
+                self.loss_step = self.loss_step + i
+                # tf.summary.scalar(f"diag.q_sqrt.g", loss[i]. step=)
+                # lr = self.model_keras.history.history['loss']
 
 
 def create_kernel_with_features(var, input_dim, num_features):
@@ -256,21 +314,26 @@ def create_kernel_with_features(var, input_dim, num_features):
     return KernelWithFeatureDecomposition(kernel, features, coefficients)
 
 def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_inducing_points,
-                          inducing_point_selector):
+                          inducing_point_selector, homogeneous=False):
     num_data, input_dim = data.query_points.shape
     var = tf.math.reduce_variance(data.observations)
     kernel_with_features1 = create_kernel_with_features(var / 2., input_dim, num_features)
-    kernel_with_features2 = create_kernel_with_features(var / 2., input_dim, num_features)
+    if homogeneous:
+        kernel_with_features2 = create_kernel_with_features(1e-12, input_dim, num_features)
+        gpflow.set_trainable(kernel_with_features2, False)
+    else:
+        kernel_with_features2 = create_kernel_with_features(var / 2., input_dim, num_features)
     kernel_list = [kernel_with_features1, kernel_with_features2]
     kernel = gpflux.helpers.construct_basic_kernel(kernel_list)
 
     Z = inducing_point_selector.get_points(X=data.query_points, Y=data.observations,
                                            M=num_inducing_points, kernel=kernel, noise=1e-6)
+
     inducing_variable = construct_basic_inducing_variables(num_inducing_points, input_dim,
                                                            output_dim=2, share_variables=True, z_init= Z)
     gpflow.utilities.set_trainable(inducing_variable, False)
 
-    layer = gpflux.layers.GPLayer(kernel, inducing_variable, num_data, whiten=False, num_latent_gps=2,
+    layer = gpflux.layers.GPLayer(kernel, inducing_variable, num_data, whiten=True, num_latent_gps=2,
                                   mean_function=gpflow.mean_functions.Constant(np.zeros([1, 2])))
 
     likelihood = gpflow.likelihoods.HeteroskedasticTFPConditional(
@@ -281,10 +344,11 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     likelihood_layer = gpflux.layers.LikelihoodLayer(likelihood)
     model = gpflux.models.DeepGP([layer], likelihood_layer)
 
-    epochs = 5000
+    epochs = 300
     batch_size = 200
 
-    callbacks = [tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=1, min_lr=1e-6),
+    callbacks = [gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=1, min_lr=1e-6),
         tf.keras.callbacks.EarlyStopping(monitor="loss", patience=50, min_delta=0.01, verbose=0, mode="min"),]
 
     fit_args = {
@@ -294,7 +358,8 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         "callbacks": callbacks,
     }
     optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
-    return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, fit_args=fit_args,
+
+    return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, #fit_args=fit_args,
                                   inducing_point_selector=inducing_point_selector)
 
 from trieste.utils import DEFAULTS, jit

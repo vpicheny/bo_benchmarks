@@ -25,7 +25,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
 
 
 dir = "results_prior"
-pb_tags = {"gauss_noise_branin", "exp_noise_branin", "hartmann_3"}
+pb_tags = {"gauss_noise_branin", "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
 
 for tag in pb_tags:
     print(f"Processing results for {tag}")
@@ -48,4 +48,4 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=True)
+    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False)

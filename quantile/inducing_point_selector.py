@@ -39,6 +39,16 @@ class InducingPointSelector(ABC):
         raise NotImplementedError
 
 
+class GridSampler(InducingPointSelector):
+    def get_points(
+            self, X: TensorType, Y: TensorType, M: int, kernel: gpflow.kernels.Kernel, noise: float
+    ):
+        d = X.shape[-1]
+        if d > 1:
+            raise ValueError("Grid only works for dim=1")
+        return tf.linspace(self._space.lower, self._space.upper, M)
+
+
 class UniformSampler(InducingPointSelector):
     def get_points(
             self, X: TensorType, Y: TensorType, M: int, kernel: gpflow.kernels.Kernel, noise: float
