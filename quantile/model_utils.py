@@ -45,7 +45,8 @@ def build_model(data, CONFIG, search_space, tb=None):
                                      lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
                                      num_inducing_points=CONFIG.num_inducing_points,
                                      inducing_point_selector=KMeans(search_space),
-                                     tb_callback=tb)
+                                     #tb_callback=tb
+                                     )
     elif CONFIG.model == "hetgp":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,

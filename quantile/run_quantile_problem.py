@@ -5,7 +5,7 @@ from trieste.ask_tell_optimization import AskTellOptimizer
 from model_utils import build_model
 from acquisition_utils import create_initial_query_points, create_acquisition_rule, extract_current_best_quantile
 from trieste.data import Dataset
-
+from config import make_all_configs, make_config
 
 def make_observer(CONFIG):
     if CONFIG.model == "GPR":
@@ -44,3 +44,17 @@ def run_quantile_experiment(CONFIG):
     # result = ask_tell.to_result()
     all_best_y = CONFIG.problem.quantile_fun(all_best_x)
     return ask_tell, all_best_x, all_best_y
+
+
+
+
+if __name__ == "__main__":
+
+    config = make_all_configs()[0]
+    config["model"] = "quantile"
+    CONFIG = make_config(config)
+    from IPython import embed
+
+    run_quantile_experiment(CONFIG)
+
+

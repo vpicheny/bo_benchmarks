@@ -4,15 +4,17 @@ import numpy as np
 import tensorflow as tf
 import trieste
 import tensorflow_probability as tfp
+from scipy.optimize import bisect
 from trieste.data import Dataset
 from trieste.acquisition.rule import OBJECTIVE, EfficientGlobalOptimization
 from trieste.acquisition.interface import SingleModelGreedyAcquisitionBuilder, AcquisitionFunction
-from trieste.acquisition.function import ExpectedImprovement
+from trieste.acquisition.function import ExpectedImprovement, MinValueEntropySearch, min_value_entropy_search, LocalPenalization
 from trieste.acquisition.sampler import GumbelSampler
 from trieste.types import TensorType
-from typing import Optional
+from typing import Optional, cast
 from model_utils import FeaturedHetGPFluxModel
 tf.keras.backend.set_floatx("float64")
+
 
 
 def create_initial_query_points(search_space, CONFIG):
@@ -32,15 +34,14 @@ def create_acquisition_rule(CONFIG):
         d = tf.shape(CONFIG.problem.lower_bounds)[0]
         acq_function = LocalPenalization(
             search_space,
-            num_samples = 10_000 * d,
+            num_samples = 10_000 * d, # perhaps too large, might be slow
             base_acquisition_function_builder = MinValueEntropySearchForQuantile(
                 search_space,
+                quantile_level = CONFIG.problem.quantile_level,
                 num_samples = 10,
-                grid_size = 10_000 * d,
-                min_value_sampler = GumbelSampler(sample_min_value=True),
-            ).using(OBJECTIVE)
+                grid_size = 10_000 * d, # perhaps too large, might be slow
+            )
         )
-
         return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),num_query_points=CONFIG.batch_size)
        
 
@@ -96,9 +97,9 @@ class MinValueEntropySearchForQuantile(MinValueEntropySearch):
     def __init__(
         self,
         search_space: SearchSpace,
+        quantile_level:float,
         num_samples: int = 5,
         grid_size: int = 1000,
-        min_value_sampler: Optional[ThompsonSampler[T]] = None,
     ):
         """
         :param search_space: The global search space over which the optimisation is defined.
@@ -106,24 +107,13 @@ class MinValueEntropySearchForQuantile(MinValueEntropySearch):
             objective function.
         :param grid_size: Size of the grid from which to sample the min-values. We recommend
             scaling this with search space dimension.
-        :param min_value_sampler: Sampler which samples minimum values.
         :raise tf.errors.InvalidArgumentError: If
             - ``num_samples`` or ``grid_size`` are negative.
         """
-        tf.debugging.assert_positive(num_samples)
-        tf.debugging.assert_positive(grid_size)
+ 
+        min_value_sampler = QuantileGumbelSampler(sample_min_value=True) # MIGHT BE WORTH USING THE TRAJECTORIES
 
-        if min_value_sampler is not None:
-            if not min_value_sampler.sample_min_value:
-                raise ValueError(
-                    """
-                    Minvalue Entropy Search requires a min_value_sampler that samples minimum
-                    values, however the passed sampler has sample_min_value=False.
-                    """
-                )
-        else:
-            min_value_sampler = ExactThompsonSampler(sample_min_value=True)
-
+        self._quantile_level = quantile_level
         self._min_value_sampler = min_value_sampler
         self._search_space = search_space
         self._num_samples = num_samples
@@ -137,12 +127,11 @@ class MinValueEntropySearchForQuantile(MinValueEntropySearch):
         tf.debugging.Assert(dataset is not None, [])
         dataset = cast(Dataset, dataset)
         tf.debugging.assert_positive(len(dataset), message="Dataset must be populated.")
-
         query_points = self._search_space.sample(num_samples=self._grid_size)
         tf.debugging.assert_same_float_dtype([dataset.query_points, query_points])
         query_points = tf.concat([dataset.query_points, query_points], 0)
         min_value_samples = self._min_value_sampler.sample(model, self._num_samples, query_points)
-        return min_value_entropy_search_for_quantile(model, min_value_samples)
+        return min_value_entropy_search_for_quantile(model, min_value_samples, self._quantile_level)
 
     def update_acquisition_function(
         self,function: AcquisitionFunction,model: FeaturedHetGPFluxModel,dataset: Optional[Dataset] = None) -> AcquisitionFunction:
@@ -160,10 +149,62 @@ class MinValueEntropySearchForQuantile(MinValueEntropySearch):
         return function
 
 
+class QuantileGumbelSampler(GumbelSampler):
+
+    def sample(self, model: ProbabilisticModel, sample_size: int, at: TensorType) -> TensorType:
+        """
+        Return approximate samples from of the objective function's minimum value.
+        :param model: The model to sample from.
+        :param sample_size: The desired number of samples.
+        :param at: Points at where to fit the Gumbel distribution, with shape `[N, D]`, for points
+            of dimension `D`. We recommend scaling `N` with search space dimension.
+        :return: The samples, of shape `[S, 1]`, where `S` is the `sample_size`.
+        :raise ValueError: If ``at`` has an invalid shape or if ``sample_size`` is not positive.
+        """
+        tf.debugging.assert_positive(sample_size)
+        tf.debugging.assert_shapes([(at, ["N", None])])
+
+        fmean, fvar = model.predict(at)
+        fmean = fmean[:,0:1] # only need posterior for f to get samples of f*
+        fvar = fvar[:,0:1]
+        fsd = tf.math.sqrt(fvar)
+
+        def probf(y: tf.Tensor) -> tf.Tensor:  # Build empirical CDF for Pr(y*^hat<y)
+            unit_normal = tfp.distributions.Normal(tf.cast(0, fmean.dtype), tf.cast(1, fmean.dtype))
+            log_cdf = unit_normal.log_cdf(-(y - fmean) / fsd)
+            return 1 - tf.exp(tf.reduce_sum(log_cdf, axis=0))
+
+        left = tf.reduce_min(fmean - 5 * fsd)
+        right = tf.reduce_max(fmean + 5 * fsd)
+
+        def binary_search(val: float) -> float:  # Find empirical interquartile range
+            return bisect(lambda y: probf(y) - val, left, right, maxiter=10000)
+
+        q1, q2 = map(binary_search, [0.25, 0.75])
+
+        log = tf.math.log
+        l1 = log(log(4.0 / 3.0))
+        l2 = log(log(4.0))
+        b = (q1 - q2) / (l1 - l2)
+        a = (q2 * l1 - q1 * l2) / (l1 - l2)
+
+        uniform_samples = tf.random.uniform([sample_size], dtype=fmean.dtype)
+        gumbel_samples = log(-log(1 - uniform_samples)) * tf.cast(b, fmean.dtype) + tf.cast(
+            a, fmean.dtype
+        )
+        gumbel_samples = tf.expand_dims(gumbel_samples, axis=-1)  # [S, 1]
+
+        return gumbel_samples
+
+
+
+
+
+
 
 
 class min_value_entropy_search_for_quantile(min_value_entropy_search):
-    def __init__(self, model: ProbabilisticModel, samples: TensorType):
+    def __init__(self, model: ProbabilisticModel, samples: TensorType, quantile_level: float):
         r"""
         Return the max-value entropy search acquisition function adapted for quantile models.
 
@@ -184,6 +225,7 @@ class min_value_entropy_search_for_quantile(min_value_entropy_search):
 
         self._model = model
         self._samples = tf.Variable(samples)
+        self._quantile_level = quantile_level
 
     def update(self, samples: TensorType) -> None:
         """Update the acquisition function with new samples."""
@@ -191,26 +233,23 @@ class min_value_entropy_search_for_quantile(min_value_entropy_search):
         tf.debugging.assert_positive(len(samples))
         self._samples.assign(samples)
 
-    @tf.function
+    #@tf.function
     def __call__(self, x: TensorType) -> TensorType:
         tf.debugging.assert_shapes(
             [(x, [..., 1, None])],
             message="This acquisition function only supports batch sizes of one.",
         )
         
-        tau = self._model.model.likelihood.tau
+        tau = self._quantile_level
 
-        combined_mean, combined_var = self._model.model.predict_f(x)
-
-        f_mean = combined_mean[:,0:1] # [N, 1]
-        f_var = combined_var[:,0:1] # [N, 1]
-        g_mean = combined_mean[:,1:2] # [N, 1]
-        g_var = combined_var[:,1:2] # [N, 1]
+        combined_mean, combined_var = self._model.model_gpflux.predict_f(x)
+        f_mean = combined_mean[:,:,0] # [N, 1]
+        f_var = combined_var[:,:,0] # [N, 1]
+        g_mean = combined_mean[:,:,1] # [N, 1]
+        g_var = combined_var[:,:,1] # [N, 1]
         f_sd = tf.clip_by_value(
-            tf.math.sqrt(f_var), 1e-8, f_mean.dtype.max
+            tf.math.sqrt(f_var), 1e-10, f_mean.dtype.max
         )  # clip below to improve numerical stability
-
-
 
         # entropy reduction is  H(y) - E_{f*}[H(y|f>f*)]
         # so we need H(y) and H(y| f>f*)
@@ -228,7 +267,7 @@ class min_value_entropy_search_for_quantile(min_value_entropy_search):
         variance_of_y = term_1 + term_2 # [N, 1]
 
         # now calc Var(y | f < f*) 
-
+        
         # first we need Var(f | f<f*) for each of our M f* samples, i.e. truncated normal (see GIBBON or MES)
         normal = tfp.distributions.Normal(tf.cast(0, f_mean.dtype), tf.cast(1, f_mean.dtype))
         gamma = (tf.squeeze(self._samples) - f_mean) / f_sd # [N, M]
@@ -239,7 +278,6 @@ class min_value_entropy_search_for_quantile(min_value_entropy_search):
         # now fiddle Var(y) to get Var(y|f<f*) for each of our M f* samples
         variance_of_y_given_f_star = variance_of_y - f_var  # [N, 1] 
         variance_of_y_given_f_star = variance_of_y_given_f_star + variance_of_f_given_f_star # [N, M]
-
 
         # Entropy is H(y) - E_{f*}[H(y|f*)]
         # so approximate using MM approx H(y)=0.5log(2*pi*e*Var(y)) and H(y|f>f*)=0.5log(2*pi*e*Var(y|f>f*)) and use MC over our f* samples
