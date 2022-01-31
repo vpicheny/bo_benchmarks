@@ -22,7 +22,7 @@ def create_initial_query_points(search_space, CONFIG):
         return search_space.sample_halton(CONFIG.num_initial_points)
 
 def create_acquisition_rule(CONFIG):
-    if CONFIG.model == "quantile":
+    if CONFIG.model in ["quantile", "homquantile"]:
         quantile_traj = NegativeGaussianProcessTrajectory()
         return trieste.acquisition.rule.EfficientGlobalOptimization(quantile_traj.using(OBJECTIVE),
                                                                          num_query_points=CONFIG.batch_size)
@@ -38,7 +38,7 @@ def create_acquisition_rule(CONFIG):
 def extract_current_best_quantile(ask_tell, CONFIG):
     model = ask_tell._models[OBJECTIVE]
     data = ask_tell._datasets[OBJECTIVE]
-    if CONFIG.model == "quantile":
+    if CONFIG.model in ["quantile", "homquantile"]:
         mean, var = model.predict(data.query_points)
         return data.query_points[tf.argmin(mean[:, 0]), :][None, :]
 
@@ -52,6 +52,8 @@ def extract_current_best_quantile(ask_tell, CONFIG):
     elif CONFIG.model == "GPR":
         mean, var = model.predict(data.query_points)
         return data.query_points[tf.argmin(mean, axis=0)[0], :][None, :]
+    else:
+        raise NotImplementedError
 
 class NegativeGaussianProcessTrajectory(SingleModelGreedyAcquisitionBuilder):
     def __repr__(self) -> str:

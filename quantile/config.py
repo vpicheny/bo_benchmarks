@@ -17,7 +17,7 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_whiten"
+    results_dir:str = "results_prior"
 
 
 def make_config(args):
@@ -56,7 +56,7 @@ def make_all_configs():
     batch_sizes = [25]
     budgets_per_dimension = [200]
     num_features = [1000]
-    models = ["hetgp"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
+    models = ["homquantile"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
 
     return list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,

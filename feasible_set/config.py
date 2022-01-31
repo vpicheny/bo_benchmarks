@@ -52,9 +52,9 @@ def make_all_configs():
     initial_budget_per_dimension = [5]
     budgets_per_dimension = [10]
     seeds = np.arange(3)
-    problems = ["branin_large_volume"]
+    problems = ["hartmann_6"]
     batch_sizes = [3]
-    rules = ["lp-ranjan"]  # ["nobatch-ranjan", "evr", "kb-ranjan"]
+    rules = ["nobatch-ranjan"]  # ["nobatch-ranjan", "evr", "kb-ranjan"]
 
     return list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   budget_per_dimension=budgets_per_dimension,

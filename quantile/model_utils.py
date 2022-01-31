@@ -32,7 +32,7 @@ from trieste.models.optimizer import Optimizer, BatchOptimizer
 from trieste.logging import get_step_number, get_tensorboard_writer
 
 from typing import Callable, Dict, Any, Optional
-from inducing_point_selector import InducingPointSelector, KMeans
+from quantile.inducing_point_selector import InducingPointSelector, KMeans
 
 tf.keras.backend.set_floatx("float64")
 
@@ -45,7 +45,16 @@ def build_model(data, CONFIG, search_space, tb=None):
                                      lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
                                      num_inducing_points=CONFIG.num_inducing_points,
                                      inducing_point_selector=KMeans(search_space),
-                                     tb_callback=tb)
+                                     )
+    elif CONFIG.model == "homquantile":
+        return build_hetgp_rff_model(data=data,
+                                     num_features=CONFIG.num_features,
+                                     likelihood_distribution=
+                                     lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
+                                     num_inducing_points=CONFIG.num_inducing_points,
+                                     inducing_point_selector=KMeans(search_space),
+                                     homogeneous=True
+                                     )
     elif CONFIG.model == "hetgp":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
@@ -57,7 +66,8 @@ def build_model(data, CONFIG, search_space, tb=None):
                                      num_features=CONFIG.num_features,
                                      likelihood_distribution=tfp.distributions.Normal,
                                      num_inducing_points=CONFIG.num_inducing_points,
-                                     inducing_point_selector=KMeans(search_space))
+                                     inducing_point_selector=KMeans(search_space),
+                                     homogeneous=True)
     elif CONFIG.model == "GPR":
         return build_quantile_gpr_model(data,
                                         batch_size=CONFIG.batch_size,
@@ -344,7 +354,7 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     likelihood_layer = gpflux.layers.LikelihoodLayer(likelihood)
     model = gpflux.models.DeepGP([layer], likelihood_layer)
 
-    epochs = 300
+    epochs = 100
     batch_size = 200
 
     callbacks = [gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
@@ -524,10 +534,6 @@ class HeteroskedasticGaussian(gpflow.likelihoods.Likelihood):
     def _predict_mean_and_var(self, Fmu, Fvar):
         raise NotImplementedError
 
-#
-# quantile_level = 0.9
-# beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=0.9).numpy()
-#
 
 def unique_points_2d(points):
     new_points = points[0:1, :]
@@ -536,3 +542,67 @@ def unique_points_2d(points):
         if not tf.reduce_any(is_point_present):
             new_points = tf.concat([new_points, points[(i+1):(i+2), :]], axis=0)
     return new_points
+
+
+class CVaRLoss(Laplace):
+    def __init__(self,
+                 loc,
+                 scale,
+                 tau,
+                 num_data,
+                 validate_args=False,
+                 allow_nan_stats=True,
+                 name='Laplace'):
+
+        super().__init__(loc, scale, validate_args, allow_nan_stats, name)
+        self.tau = tau
+        self.num_data = num_data
+
+    def _mean(self):
+        loc = tf.convert_to_tensor(self.loc)
+        return tf.broadcast_to(loc, self._batch_shape_tensor(loc=loc))
+
+    def _stddev(self):
+        scale = tf.convert_to_tensor(self.scale)
+        return tf.broadcast_to(np.sqrt(2.) * scale,
+                               self._batch_shape_tensor(scale=scale))
+
+    def _variance(self):
+        scale = tf.convert_to_tensor(self.scale)
+        return tf.broadcast_to(2. * scale ** 2,
+                               self._batch_shape_tensor(scale=scale))
+
+    def _log_prob(self, x):
+        loc = tf.convert_to_tensor(self.loc)
+        scale = tf.convert_to_tensor(self.scale)
+        z = (x - loc) / scale
+        is_neg = 0.5 - 0.5 * tf.sign(z)
+        return tf.math.log(self.tau * (1 - self.tau) / scale) - ((1. - self.tau) * loc * self.num_data / self.scale + z * (1. - is_neg) )
+        # return tf.math.log(self.tau * (1 - self.tau) / scale) - z * (1. - is_neg)
+
+    def _z(self, x):
+        return (x - self.loc) / self.scale
+
+    def _cdf(self, x):
+        return NotImplementedError
+
+    def _log_cdf(self, x):
+        return NotImplementedError
+
+    def _quantile(self, p):
+        return NotImplementedError
+
+    def _sample_n(self, n, seed=None):
+        return NotImplementedError
+
+    def _log_survival_function(self, x):
+        return NotImplementedError
+
+    def _entropy(self):
+        return NotImplementedError
+
+    def _median(self):
+        return NotImplementedError
+
+    def _mode(self):
+        return NotImplementedError
