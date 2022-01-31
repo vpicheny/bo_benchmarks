@@ -8,6 +8,7 @@ from trieste.data import Dataset
 from trieste.acquisition.rule import OBJECTIVE, EfficientGlobalOptimization
 from trieste.acquisition.interface import SingleModelGreedyAcquisitionBuilder, AcquisitionFunction
 from trieste.acquisition.function import ExpectedImprovement
+from trieste.acquisition.sampler import GumbelSampler
 from trieste.types import TensorType
 from typing import Optional
 from model_utils import FeaturedHetGPFluxModel
@@ -23,9 +24,27 @@ def create_initial_query_points(search_space, CONFIG):
 
 def create_acquisition_rule(CONFIG):
     if CONFIG.model == "quantile":
-        quantile_traj = NegativeGaussianProcessTrajectory()
-        return trieste.acquisition.rule.EfficientGlobalOptimization(quantile_traj.using(OBJECTIVE),
-                                                                         num_query_points=CONFIG.batch_size)
+        # commented out TS for now
+        #acq_function = NegativeGaussianProcessTrajectory()
+        #return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),num_query_points=CONFIG.batch_size)
+        # instead lets do new MES combined with LP
+        search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
+        d = tf.shape(CONFIG.problem.lower_bounds)[0]
+        acq_function = LocalPenalization(
+            search_space,
+            num_samples = 10_000 * d,
+            base_acquisition_function_builder = MinValueEntropySearchForQuantile(
+                search_space,
+                num_samples = 10,
+                grid_size = 10_000 * d,
+                min_value_sampler = GumbelSampler(sample_min_value=True),
+            ).using(OBJECTIVE)
+        )
+
+        return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),num_query_points=CONFIG.batch_size)
+       
+
+
     elif CONFIG.model == "hetgp":
         hetgp_traj = NegativeQuantilefromGaussianHetGPTrajectory(quantile_level=CONFIG.problem.quantile_level)
         return trieste.acquisition.rule.EfficientGlobalOptimization(hetgp_traj.using(OBJECTIVE),
@@ -72,6 +91,43 @@ class NegativeGaussianProcessTrajectory(SingleModelGreedyAcquisitionBuilder):
 
 
 class MinValueEntropySearchForQuantile(MinValueEntropySearch):
+
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        num_samples: int = 5,
+        grid_size: int = 1000,
+        min_value_sampler: Optional[ThompsonSampler[T]] = None,
+    ):
+        """
+        :param search_space: The global search space over which the optimisation is defined.
+        :param num_samples: Number of samples to draw from the distribution over the minimum of the
+            objective function.
+        :param grid_size: Size of the grid from which to sample the min-values. We recommend
+            scaling this with search space dimension.
+        :param min_value_sampler: Sampler which samples minimum values.
+        :raise tf.errors.InvalidArgumentError: If
+            - ``num_samples`` or ``grid_size`` are negative.
+        """
+        tf.debugging.assert_positive(num_samples)
+        tf.debugging.assert_positive(grid_size)
+
+        if min_value_sampler is not None:
+            if not min_value_sampler.sample_min_value:
+                raise ValueError(
+                    """
+                    Minvalue Entropy Search requires a min_value_sampler that samples minimum
+                    values, however the passed sampler has sample_min_value=False.
+                    """
+                )
+        else:
+            min_value_sampler = ExactThompsonSampler(sample_min_value=True)
+
+        self._min_value_sampler = min_value_sampler
+        self._search_space = search_space
+        self._num_samples = num_samples
+        self._grid_size = grid_size
 
     def __repr__(self) -> str:
         return f"MinValueEntropySearchForQuantile"
@@ -142,47 +198,58 @@ class min_value_entropy_search_for_quantile(min_value_entropy_search):
             message="This acquisition function only supports batch sizes of one.",
         )
         
+        tau = self._model.model.likelihood.tau
 
-        first_term = ?
+        combined_mean, combined_var = self._model.model.predict_f(x)
 
-
-
-        second_term = ?
-
-        return first_term + second_term
-
-
-
-        fmean, fvar = self._model.predict(tf.squeeze(x, -2))
-        fsd = tf.math.sqrt(fvar)
-        fsd = tf.clip_by_value(
-            fsd, CLAMP_LB, fmean.dtype.max
+        f_mean = combined_mean[:,0:1] # [N, 1]
+        f_var = combined_var[:,0:1] # [N, 1]
+        g_mean = combined_mean[:,1:2] # [N, 1]
+        g_var = combined_var[:,1:2] # [N, 1]
+        f_sd = tf.clip_by_value(
+            tf.math.sqrt(f_var), 1e-8, f_mean.dtype.max
         )  # clip below to improve numerical stability
 
 
 
+        # entropy reduction is  H(y) - E_{f*}[H(y|f>f*)]
+        # so we need H(y) and H(y| f>f*)
+        # lets do MM approx H(y)=0.5log(2*pi*e*Var(y)) and H(y|f>f*)=0.5log(2*pi*e*Var(y|f>f*))
+        
+        # first calc Var(y) = Var_{q,sigma}(E[y|q,sigma]) + E{q,sigma}[Var(y|q, sigma)] 
+        # where sigma = e^g and q=f (for gaussian f and g)
+        term_1 = tf.math.exp(2*(g_mean+g_var)) # [N, 1]
+        term_1 = (1. - 2. * tau + 2. * tau**2) /((tau**2) * ((1. - tau)**2)) * term_1 # [N, 1]
+    
+        term_2 = (tf.math.exp(g_var) - 1) * tf.math.exp(2*g_mean + g_var) # [N, 1]
+        term_2 = ((1. -2. * tau)**2) /((tau**2) * ((1. - tau)**2)) * term_2 # [N, 1]
+        term_2 = term_2 + f_var # [N, 1]
+
+        variance_of_y = term_1 + term_2 # [N, 1]
+
+        # now calc Var(y | f < f*) 
+
+        # first we need Var(f | f<f*) for each of our M f* samples, i.e. truncated normal (see GIBBON or MES)
+        normal = tfp.distributions.Normal(tf.cast(0, f_mean.dtype), tf.cast(1, f_mean.dtype))
+        gamma = (tf.squeeze(self._samples) - f_mean) / f_sd # [N, M]
+        log_minus_cdf = normal.log_cdf(-gamma) # [N, M]
+        ratio = tf.math.exp(normal.log_prob(gamma) - log_minus_cdf)  # [N, M]
+        variance_of_f_given_f_star = f_var * (1 + gamma * ratio - ratio**2)  # [N, M]
+
+        # now fiddle Var(y) to get Var(y|f<f*) for each of our M f* samples
+        variance_of_y_given_f_star = variance_of_y - f_var  # [N, 1] 
+        variance_of_y_given_f_star = variance_of_y_given_f_star + variance_of_f_given_f_star # [N, M]
 
 
+        # Entropy is H(y) - E_{f*}[H(y|f*)]
+        # so approximate using MM approx H(y)=0.5log(2*pi*e*Var(y)) and H(y|f>f*)=0.5log(2*pi*e*Var(y|f>f*)) and use MC over our f* samples
 
+        H_of_y = 0.5 * tf.math.log(variance_of_y)  # [N, 1]
+        H_of_y_given_f_star = 0.5 * tf.math.log(variance_of_y_given_f_star) # [N, M]
+        entropy_reduction_for_each_f_star = H_of_y - H_of_y_given_f_star # [N, M]
 
-
-
-        normal = tfp.distributions.Normal(tf.cast(0, fmean.dtype), tf.cast(1, fmean.dtype))
-        gamma = (tf.squeeze(self._samples) - fmean) / fsd
-
-        log_minus_cdf = normal.log_cdf(-gamma)
-        ratio = tf.math.exp(normal.log_prob(gamma) - log_minus_cdf)
-        f_acqu_x = -gamma * ratio / 2 - log_minus_cdf
-
-        return tf.math.reduce_mean(f_acqu_x, axis=1, keepdims=True)
-
-
-
-
-
-
-
-
+        return tf.math.reduce_mean(entropy_reduction_for_each_f_star, axis=1, keepdims=True) # [N, 1] average over f* samples
+ 
 
 
 
