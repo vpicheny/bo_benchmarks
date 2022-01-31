@@ -67,6 +67,128 @@ class NegativeGaussianProcessTrajectory(SingleModelGreedyAcquisitionBuilder):
         return lambda at: -trajectory(tf.squeeze(at, axis=1))[..., 0:1]
 
 
+
+
+
+
+
+
+class MinValueEntropySearchForQuantile(MinValueEntropySearch):
+
+    def __repr__(self) -> str:
+        return f"MinValueEntropySearchForQuantile"
+
+    def prepare_acquisition_function(self, model: FeaturedHetGPFluxModel, dataset: Optional[Dataset] = None) -> AcquisitionFunction:
+
+        tf.debugging.Assert(dataset is not None, [])
+        dataset = cast(Dataset, dataset)
+        tf.debugging.assert_positive(len(dataset), message="Dataset must be populated.")
+
+        query_points = self._search_space.sample(num_samples=self._grid_size)
+        tf.debugging.assert_same_float_dtype([dataset.query_points, query_points])
+        query_points = tf.concat([dataset.query_points, query_points], 0)
+        min_value_samples = self._min_value_sampler.sample(model, self._num_samples, query_points)
+        return min_value_entropy_search_for_quantile(model, min_value_samples)
+
+    def update_acquisition_function(
+        self,function: AcquisitionFunction,model: FeaturedHetGPFluxModel,dataset: Optional[Dataset] = None) -> AcquisitionFunction:
+
+        tf.debugging.Assert(dataset is not None, [])
+        dataset = cast(Dataset, dataset)
+        tf.debugging.assert_positive(len(dataset), message="Dataset must be populated.")
+        tf.debugging.Assert(isinstance(function, min_value_entropy_search_for_quantile), [])
+
+        query_points = self._search_space.sample(num_samples=self._grid_size)
+        tf.debugging.assert_same_float_dtype([dataset.query_points, query_points])
+        query_points = tf.concat([dataset.query_points, query_points], 0)
+        min_value_samples = self._min_value_sampler.sample(model, self._num_samples, query_points)
+        function.update(min_value_samples)  # type: ignore
+        return function
+
+
+
+
+class min_value_entropy_search_for_quantile(min_value_entropy_search):
+    def __init__(self, model: ProbabilisticModel, samples: TensorType):
+        r"""
+        Return the max-value entropy search acquisition function adapted for quantile models.
+
+        This function calculates the information gain (or
+        change in entropy) in the distribution over the objective minimum :math:`y^*`, if we were
+        to evaluate the objective at a given point.
+
+        :param model: The model of the objective function.
+        :param samples: Samples from the distribution over :math:`y^*`.
+        :return: The max-value entropy search acquisition function modified for objective
+            minimisation. This function will raise :exc:`ValueError` or
+            :exc:`~tf.errors.InvalidArgumentError` if used with a batch size greater than one.
+        :raise ValueError or tf.errors.InvalidArgumentError: If ``samples`` has rank less than two,
+            or is empty.
+        """
+        tf.debugging.assert_rank(samples, 2)
+        tf.debugging.assert_positive(len(samples))
+
+        self._model = model
+        self._samples = tf.Variable(samples)
+
+    def update(self, samples: TensorType) -> None:
+        """Update the acquisition function with new samples."""
+        tf.debugging.assert_rank(samples, 2)
+        tf.debugging.assert_positive(len(samples))
+        self._samples.assign(samples)
+
+    @tf.function
+    def __call__(self, x: TensorType) -> TensorType:
+        tf.debugging.assert_shapes(
+            [(x, [..., 1, None])],
+            message="This acquisition function only supports batch sizes of one.",
+        )
+        
+
+        first_term = ?
+
+
+
+        second_term = ?
+
+        return first_term + second_term
+
+
+
+        fmean, fvar = self._model.predict(tf.squeeze(x, -2))
+        fsd = tf.math.sqrt(fvar)
+        fsd = tf.clip_by_value(
+            fsd, CLAMP_LB, fmean.dtype.max
+        )  # clip below to improve numerical stability
+
+
+
+
+
+
+
+
+
+        normal = tfp.distributions.Normal(tf.cast(0, fmean.dtype), tf.cast(1, fmean.dtype))
+        gamma = (tf.squeeze(self._samples) - fmean) / fsd
+
+        log_minus_cdf = normal.log_cdf(-gamma)
+        ratio = tf.math.exp(normal.log_prob(gamma) - log_minus_cdf)
+        f_acqu_x = -gamma * ratio / 2 - log_minus_cdf
+
+        return tf.math.reduce_mean(f_acqu_x, axis=1, keepdims=True)
+
+
+
+
+
+
+
+
+
+
+
+
 class NegativeQuantilefromGaussianHetGPTrajectory(SingleModelGreedyAcquisitionBuilder):
 
     def __init__(self, quantile_level: float = 0.9):
