@@ -67,12 +67,6 @@ class NegativeGaussianProcessTrajectory(SingleModelGreedyAcquisitionBuilder):
         return lambda at: -trajectory(tf.squeeze(at, axis=1))[..., 0:1]
 
 
-
-
-
-
-
-
 class MinValueEntropySearchForQuantile(MinValueEntropySearch):
 
     def __repr__(self) -> str:
