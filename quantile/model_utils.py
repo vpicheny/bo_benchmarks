@@ -202,6 +202,12 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
         """"""
         return f"FeaturedHetGPFluxModel({self.model_gpflux!r}, {self.optimizer.optimizer!r})"
 
+    def predict(self, query_points: TensorType) -> tuple[TensorType, TensorType]:
+        """Note: unless otherwise noted, this returns the mean and variance of the last layer
+        conditioned on one sample from the previous layers."""
+        mean, var = self.model_gpflux.predict_f(query_points)
+        return mean[..., 0:1], var[..., 0:1]
+
     def sample_trajectory(self) -> Callable:
         return sample_dgp(self.model_gpflux)
 

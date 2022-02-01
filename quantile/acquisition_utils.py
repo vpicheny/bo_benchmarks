@@ -6,12 +6,15 @@ import trieste
 import tensorflow_probability as tfp
 from scipy.optimize import bisect
 from trieste.data import Dataset
+from trieste.space import SearchSpace
+from trieste.types import TensorType
+
 from trieste.acquisition.rule import OBJECTIVE, EfficientGlobalOptimization
 from trieste.acquisition.interface import SingleModelGreedyAcquisitionBuilder, AcquisitionFunction
 from trieste.acquisition.function import ExpectedImprovement, MinValueEntropySearch, min_value_entropy_search, \
     LocalPenalization
 from trieste.acquisition.sampler import GumbelSampler
-from trieste.types import TensorType
+
 from typing import Optional, cast
 from model_utils import FeaturedHetGPFluxModel
 
@@ -34,15 +37,17 @@ def create_acquisition_rule(CONFIG):
         # instead lets do new MES combined with LP
         search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
         d = tf.shape(CONFIG.problem.lower_bounds)[0]
-        acq_function = LocalPenalization(
-            search_space,
-            num_samples=1_000 * d,  # perhaps too large, might be slow
-            base_acquisition_function_builder=MinValueEntropySearchForQuantile(
+        base_builder = MinValueEntropySearchForQuantile(
                 search_space,
                 quantile_level=CONFIG.problem.quantile_level,
                 num_samples=10,
                 grid_size=1_000 * d,  # perhaps too large, might be slow
             )
+        # acq_function = base_builder
+        acq_function = LocalPenalization(
+            search_space,
+            num_samples=1_000 * d,  # perhaps too large, might be slow
+            base_acquisition_function_builder=base_builder
         )
         return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),
                                                                     num_query_points=CONFIG.batch_size)
@@ -195,6 +200,7 @@ class QuantileGumbelSampler(GumbelSampler):
 
 
 class min_value_entropy_search_for_quantile(min_value_entropy_search):
+
     def __init__(self, model: ProbabilisticModel, samples: TensorType, quantile_level: float):
         r"""
         Return the max-value entropy search acquisition function adapted for quantile models.

@@ -52,11 +52,11 @@ def dict_product(dicts):
 def make_all_configs():
     initial_budget_per_dimension = [50]
     seeds = np.arange(10)
-    problems =  ["flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
+    problems = ["flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
     batch_sizes = [25]
-    budgets_per_dimension = [200]
+    budgets_per_dimension = [225]
     num_features = [1000]
-    models = ["homquantile"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
+    models = ["quantile"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
 
     return list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,
