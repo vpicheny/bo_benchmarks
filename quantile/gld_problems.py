@@ -1,33 +1,23 @@
-from quantile.problems import Problem
+from typing import Callable, Optional
+from abc import ABC, abstractmethod
+
+import matplotlib.pyplot as plt
 import gpflow
+import gpflux
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
-from trieste.models.gpflow.models import GaussianProcessRegression
 from trieste.space import Box
-from trieste.models.gpflux import DeepGaussianProcess
-
-import gpflux
-from gpflux.layers import LatentVariableLayer
-from gpflux.models import DeepGP
+from gpflow.config import default_float
 from gpflux.models.deep_gp import sample_dgp
-from gpflux.sampling.kernel_with_feature_decomposition import KernelWithFeatureDecomposition
-from gpflux.sampling.sample import efficient_sample, Sample
-from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
-from gpflux.helpers import construct_basic_inducing_variables
+
 from gpflow.inducing_variables import (
     InducingPoints,
     SharedIndependentInducingVariables,
 )
 
 from quantile.model_utils import create_kernel_with_features
+from plotting import  create_grid, plot_function_2d, plot_surface
 
-
-from typing import Callable, Optional
-from abc import ABC, abstractmethod
-import tensorflow as tf
-import numpy as np
-from gpflow.config import default_float
 
 def softplus(x):
     return tf.math.log(1.0 + tf.exp(x))
@@ -67,10 +57,10 @@ class GLD(ABC):
         if tau.get_shape().ndims == 1:
             tau = tau[:, None, None]
 
-        lambda0 = lambda_val[None, :, :, 0]
-        lambda1 = self.softplus_function(lambda_val[None, :, :, 1])
-        lambda2 = lambda_val[None, :, :, 2] * .1
-        lambda3 = lambda_val[None, :, :, 3] * .1
+        lambda0 = lambda_val[None, :, :, 0] * 2.
+        lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 1.) / 3.
+        lambda2 = lambda_val[None, :, :, 2] * .2
+        lambda3 = lambda_val[None, :, :, 3] * .2
 
         # Special cases when lambda2 and lambda3 are zero
         l2_zeros_grid = tf.equal(tf.ones_like(tau) * lambda2, 0.)
@@ -96,7 +86,7 @@ class GLD(ABC):
 
         # Quantile value
         Q = lambda0 + (term1 - term2) * lambda1
-        Q = tf.minimum(tf.maximum(Q, -1e4), 1e4)
+        # Q = tf.minimum(tf.maximum(Q, -1e4), 1e4)
         return Q  # [Q, S, N]
 
     def sample(self, lambda_val: tf.Tensor):
@@ -107,33 +97,68 @@ class GLD(ABC):
         """
         tau = tf.random.uniform(lambda_val[..., 0].shape)  # [...]
         Q = self.quantile(tau[None, ...], lambda_val)  # [1, ...]
-        return Q[0, ...]
+        return Q[0, 0, ..., None]
 
 
-lower_bounds = [0.] * 4
-upper_bounds = [1.] * 4
-box = Box(lower_bounds, upper_bounds)
+def create_gld_trajectory(input_dim, lengthscale, seed, tau):
 
-input_dim = 4
-num_features = 1000
-kernel_with_features = create_kernel_with_features(1., input_dim, num_features)
-kernel = gpflux.helpers.construct_basic_kernel([kernel_with_features] * 4)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
 
-Z = box.sample_sobol(10)
+    lower_bounds = [0.] * input_dim
+    upper_bounds = [1.] * input_dim
+    box = Box(lower_bounds, upper_bounds)
 
-shared_ip = InducingPoints(Z)
-inducing_variable = SharedIndependentInducingVariables(shared_ip)
+    num_features = 1000
+    kernel_with_features = create_kernel_with_features(1., input_dim, num_features, lengthscale)
+    kernel = gpflux.helpers.construct_basic_kernel([kernel_with_features] * 4)
 
-layer = gpflux.layers.GPLayer(kernel, inducing_variable, num_data=1, whiten=True, num_latent_gps=4,
-                              mean_function=gpflow.mean_functions.Constant(np.zeros([1, 4])))
+    Z = box.sample_sobol(2)
 
-model = gpflux.models.DeepGP([layer], gpflow.likelihoods.Gaussian())
+    shared_ip = InducingPoints(Z)
+    inducing_variable = SharedIndependentInducingVariables(shared_ip)
 
-trajectory = sample_dgp(model)
+    layer = gpflux.layers.GPLayer(kernel, inducing_variable, num_data=1, whiten=True, num_latent_gps=4,
+                                  mean_function=gpflow.mean_functions.Constant(np.zeros([1, 4])))
 
-gp_val = trajectory(box.sample_sobol(3))
+    model = gpflux.models.DeepGP([layer], gpflow.likelihoods.Gaussian())
 
-gld = GLD()
-gld.sample(gp_val[None, ...])
-gld.quantile(tau = 0.9, lambda_val=gp_val[None, ...])
+    trajectory = sample_dgp(model)
+
+    gld = GLD()
+
+    fun = lambda at: gld.sample(trajectory(at)[None, ...])
+    quantile_fun = tf.function(lambda at: gld.quantile(tau=tau, lambda_val=trajectory(at)[None, ...])[0, 0, ..., None])
+
+    return fun, quantile_fun
+
+
+if __name__ == "__main__":
+
+    quantile_levels = np.linspace(0.1, .9, 2)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    for quantile_level in quantile_levels:
+        fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=2, tau=quantile_level)
+
+        # Create a regular grid on the parameter space
+        Xplot, xx, yy = create_grid(mins=[0., 0.], maxs=[1., 1.], grid_density=30)
+        qfun = quantile_fun(Xplot).numpy()
+        plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
+
+    nrow = 4
+    ncol = 4
+    fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all", sharey="all")
+
+    bins = np.linspace(-6., 6., 20)
+
+    for i in range(nrow):
+        for j in range(ncol):
+            x = np.random.uniform(0., 1., 2).reshape(-1, 1)
+            xx = np.repeat(x, 10000).reshape(10000, 2)
+            f = fun(xx).numpy()
+            ax[i, j].hist(f, bins)
+
 

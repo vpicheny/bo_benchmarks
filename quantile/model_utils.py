@@ -323,8 +323,8 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
                 # lr = self.model_keras.history.history['loss']
 
 
-def create_kernel_with_features(var, input_dim, num_features):
-    kernel = set_kernel(var, input_dim)
+def create_kernel_with_features(var, input_dim, num_features, lengthscale=0.2):
+    kernel = set_kernel(var, input_dim, lengthscale=lengthscale)
     coefficients = np.ones((num_features, 1), dtype=default_float())
     features = RandomFourierFeaturesCosine(kernel, num_features, dtype=default_float())
     return KernelWithFeatureDecomposition(kernel, features, coefficients)
@@ -364,7 +364,7 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     batch_size = 200
 
     callbacks = [gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=1, min_lr=1e-6),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=0, min_lr=1e-6),
         tf.keras.callbacks.EarlyStopping(monitor="loss", patience=50, min_delta=0.01, verbose=0, mode="min"),]
 
     fit_args = {
@@ -485,8 +485,8 @@ def build_quantile_gpr_model(data, batch_size, quantile_level):
                                      optimizer=BatchOptimizer(tf.optimizers.Adam(), batch_size=100))
 
 
-def set_kernel(var, input_dim):
-    kernel = gpflow.kernels.Matern52(variance=var, lengthscales=0.2 * np.ones(input_dim, ))
+def set_kernel(var, input_dim, lengthscale=0.2):
+    kernel = gpflow.kernels.Matern52(variance=var, lengthscales=lengthscale * np.ones(input_dim, ))
     prior_scale = tf.cast(1.0, dtype=tf.float64)
     kernel.variance.prior = tfp.distributions.LogNormal(tf.cast(0.0, dtype=tf.float64), prior_scale)
     kernel.lengthscales.prior = tfp.distributions.LogNormal(tf.math.log(kernel.lengthscales), prior_scale)

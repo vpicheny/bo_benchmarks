@@ -8,6 +8,7 @@ from trieste.observer import OBJECTIVE
 
 def run_single_experiment(config):
     config = make_config(config)
+    print("config built")
 
     try:
         # Create target Directory

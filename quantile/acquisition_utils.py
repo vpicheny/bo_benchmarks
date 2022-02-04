@@ -30,27 +30,29 @@ def create_initial_query_points(search_space, CONFIG):
 
 
 def create_acquisition_rule(CONFIG):
-    if CONFIG.model == "quantile":
-        # commented out TS for now
-        # acq_function = NegativeGaussianProcessTrajectory()
-        # return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),num_query_points=CONFIG.batch_size)
-        # instead lets do new MES combined with LP
-        search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
-        d = tf.shape(CONFIG.problem.lower_bounds)[0]
-        base_builder = MinValueEntropySearchForQuantile(
+    if CONFIG.model in ["quantile", "homquantile"]:
+        if CONFIG.rule == "TS":
+            acq_function = NegativeGaussianProcessTrajectory()
+            return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),num_query_points=CONFIG.batch_size)
+        elif CONFIG.rule == "MES":
+            search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
+            d = tf.shape(CONFIG.problem.lower_bounds)[0]
+            base_builder = MinValueEntropySearchForQuantile(
+                    search_space,
+                    quantile_level=CONFIG.problem.quantile_level,
+                    num_samples=10,
+                    grid_size=1_000 * d,  # perhaps too large, might be slow
+                )
+            # acq_function = base_builder
+            acq_function = LocalPenalization(
                 search_space,
-                quantile_level=CONFIG.problem.quantile_level,
-                num_samples=10,
-                grid_size=1_000 * d,  # perhaps too large, might be slow
+                num_samples=1_000 * d,  # perhaps too large, might be slow
+                base_acquisition_function_builder=base_builder
             )
-        # acq_function = base_builder
-        acq_function = LocalPenalization(
-            search_space,
-            num_samples=1_000 * d,  # perhaps too large, might be slow
-            base_acquisition_function_builder=base_builder
-        )
-        return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),
-                                                                    num_query_points=CONFIG.batch_size)
+            return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),
+                                                                        num_query_points=CONFIG.batch_size)
+        else:
+            raise NotImplementedError(f"Wrong rule, received {CONFIG.rule}")
 
 
     elif CONFIG.model == "hetgp":
@@ -60,18 +62,18 @@ def create_acquisition_rule(CONFIG):
     elif CONFIG.model == "GPR":
         return EfficientGlobalOptimization(myExpectedImprovement().using(OBJECTIVE))
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f"Wrong model, received {CONFIG.model}")
 
 
 def extract_current_best_quantile(ask_tell, CONFIG):
     model = ask_tell._models[OBJECTIVE]
     data = ask_tell._datasets[OBJECTIVE]
-    if CONFIG.model == "quantile":
+    if CONFIG.model in ["quantile", "homquantile"]:
         mean, var = model.predict(data.query_points)
         return data.query_points[tf.argmin(mean[:, 0]), :][None, :]
 
     elif CONFIG.model == "hetgp":
-        mean, var = model.predict(data.query_points)
+        mean, var = model.model_gpflux.predict_f(data.query_points)
         lik_layer = model.model_gpflux.likelihood_layer
         dist = lik_layer.likelihood.conditional_distribution(mean)
         quantile = dist.quantile(value=CONFIG.problem.quantile_level)
@@ -115,11 +117,14 @@ class MinValueEntropySearchForQuantile(MinValueEntropySearch):
 
         min_value_sampler = QuantileGumbelSampler(sample_min_value=True)  # MIGHT BE WORTH USING THE TRAJECTORIES
 
+        super().__init__(
+                search_space,
+                num_samples,
+                grid_size,
+                min_value_sampler,
+        )
+
         self._quantile_level = quantile_level
-        self._min_value_sampler = min_value_sampler
-        self._search_space = search_space
-        self._num_samples = num_samples
-        self._grid_size = grid_size
 
     def __repr__(self) -> str:
         return f"MinValueEntropySearchForQuantile"
