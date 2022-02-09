@@ -187,7 +187,7 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
 
     def __init__(self,
                  model: DeepGP,
-                 optimizer: tf.optimizers.Optimizer | None = None,
+                 optimizer: BatchOptimizer | None = None,
                  inducing_point_selector: InducingPointSelector = None,
                  ):
 
@@ -447,7 +447,8 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         "verbose": 0,
         "callbacks": callbacks,
     }
-    optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
+    # optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
+    optimizer = BatchOptimizer(tf.optimizers.Adam(0.01), fit_args)
 
     return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, #fit_args=fit_args,
                                   inducing_point_selector=inducing_point_selector)
