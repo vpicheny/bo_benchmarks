@@ -89,7 +89,7 @@ class GIBBONForQuantile(GIBBON):
                 model, pending_points, rescaled_repulsion=self._rescaled_repulsion, quantile_level = self._quantile_level
             )
 
-            #@tf.function
+            @tf.function
             def gibbon_acquisition(x: TensorType) -> TensorType:
                 return cast(PenalizationFunction, self._diversity_term)(x) + cast(
                     AcquisitionFunction, self._quality_term
@@ -134,7 +134,7 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         self._quantile_level = quantile_level
 
 
-    #@tf.function
+    @tf.function
     def __call__(self, x: TensorType) -> TensorType:
         tf.debugging.assert_shapes(
             [(x, [..., 1, None])],
@@ -158,7 +158,7 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         term_1 = tf.math.exp(2*(g_mean+g_var)) # [N, 1]
         term_1 = (1. - 2. * tau + 2. * tau**2) /((tau**2) * ((1. - tau)**2)) * term_1 # [N, 1]
         term_2 = (tf.math.exp(g_var) - 1) * tf.math.exp(2*g_mean + g_var) # [N, 1]
-        term_2 = ((1. -2. * tau)**2) /((tau**2) * ((1. - tau)**2)) * term_2 # [N, 1]
+        term_2 = const * term_2 # [N, 1]
         term_2 = term_2 + f_var # [N, 1]
         y_var = term_1 + term_2 # [N, 1]
 
@@ -172,41 +172,43 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         f_covar_pending = combined_pending_covar[0,:,:] # [m, m]
         g_covar_pending = combined_pending_covar[1,:,:] # [m, m]
 
+
+        # calc y variance for pending points
+        term_1 = tf.math.exp(2*(g_mean_pending+g_var_pending)) # [N, 1]
+        term_1 = (1. - 2. * tau + 2. * tau**2) /((tau**2) * ((1. - tau)**2)) * term_1 # [N, 1]
+        term_2 = (tf.math.exp(g_var_pending) - 1) * tf.math.exp(2*g_mean_pending + g_var_pending) # [N, 1]
+        term_2 = const * term_2 # [N, 1]
+        term_2 = term_2 + f_var_pending # [N, 1]
+        y_var_pending = term_1 + term_2 # [N, 1]
+
+
         # calc covariance between pending points
         sigma_covar_pending = g_mean_pending + tf.transpose(g_mean_pending) # [m,m]
         sigma_covar_pending += (g_var_pending +tf.transpose(g_var_pending))/0.5 # [m,m]
-        sigma_covar_pending = tf.math.exp(sigma_covar_pending)*(tf.math.exp(g_covar_pending)) # [m,m]
+        sigma_covar_pending = tf.math.exp(sigma_covar_pending)*(tf.math.exp(g_covar_pending)-1.0) # [m,m]
         y_covar_pending = f_covar_pending + const * sigma_covar_pending
+        y_covar_pending = tf.linalg.set_diag(y_covar_pending, tf.squeeze(y_var_pending,-1))
         B = y_covar_pending # [m, m]
         B = tf.expand_dims(B,0) # [1, m , m]
 
-        # calculate covariance between candidate and pending points
+        # calculate covariance between candidate and pending points (cov(y_1,y_2 | f, g) = 0 unless y_1=y_2 )
         covars = self._model.covariance_between_points(tf.squeeze(x, -2), self._pending_points)
-        
         f_covar = covars[0][0] # [1, N, m]
         g_covar = covars[1][0] # [1, N, m] 
         sigma_covar = g_mean + tf.transpose(g_mean_pending) # [N,m]
-        sigma_covar += (g_var_pending + tf.transpose(g_var_pending)) / 0.5
-        sigma_covar = tf.math.exp(sigma_covar) * tf.math.exp(g_covar)
-        y_covar = f_covar + const * sigma_covar
+        sigma_covar += (g_var + tf.transpose(g_var_pending)) / 0.5
+        sigma_covar = tf.math.exp(sigma_covar) * (tf.math.exp(g_covar)-1.0)
+        y_covar = f_covar + const * sigma_covar # [N, m]
         A = y_covar # [N, m]
         A = tf.expand_dims(A, -1) # [N, m , 1]
 
-
- 
-
         # efficiently calc det of covariance
-        L = tf.linalg.cholesky(B) # [m, m]
+        L = tf.linalg.cholesky(B) # [1, m, m]
         L_inv_A = tf.linalg.triangular_solve(L, A)
-        V_det = yvar - tf.squeeze(
+        V_det = y_var - tf.squeeze(
             tf.matmul(L_inv_A, L_inv_A, transpose_a=True), -1
         )  # equation for determinant of block matrices
-        repulsion = 0.5 * (tf.math.log(V_det) - tf.math.log(yvar))
-
-        from IPython import embed
-        embed()
-
-
+        repulsion = 0.5 * (tf.math.log(V_det) - tf.math.log(y_var))
 
         if self._rescaled_repulsion:
             batch_size = tf.cast(tf.shape(self._pending_points)[0], dtype=fmean.dtype)
@@ -215,7 +217,6 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
             repulsion_weight = 1.0
 
         return repulsion_weight * repulsion
-
 
 
 
