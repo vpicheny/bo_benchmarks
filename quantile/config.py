@@ -9,6 +9,7 @@ class CONFIG:
     problem_name:str  # "quantile_branin" or ....
     problem = None
     seed:int
+    level:float = None
     budget:int = None
     initial_budget_per_dimension:int = 10
     budget_per_dimension:int = 100
@@ -17,12 +18,14 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_whiten"
+    results_dir:str = "results_gld"
+    dimension: int = None
+    rule:float = "TS"
 
 
 def make_config(args):
     config = CONFIG(**args)
-    config.problem = get_problem(config.problem_name)
+    config.problem = get_problem([config.problem_name, config.seed, config.dimension, config.level])
 
     config.exp_name = f"problem_{config.problem_name}" \
                       f"_model_{config.model}" \
@@ -31,9 +34,10 @@ def make_config(args):
                       f"_batch_{config.batch_size}" \
                       f"_seed_{config.seed}"
 
-    subdir_name = f"{config.problem_name}/" \
-                      f"{config.model}" \
-                      f"_init_{config.initial_budget_per_dimension}" \
+    subdir_name = f"{config.problem_name}_dim_{config.dimension}_q_{config.problem.quantile_level}/" \
+                    f"{config.model}" \
+                  f"_rule_{config.rule}" \
+                  f"_init_{config.initial_budget_per_dimension}" \
                       f"_budget_{config.budget_per_dimension}" \
                       f"_batch_{config.batch_size}"
 
@@ -52,16 +56,37 @@ def dict_product(dicts):
 def make_all_configs():
     initial_budget_per_dimension = [50]
     seeds = np.arange(10)
-    problems =  ["flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
-    batch_sizes = [25]
-    budgets_per_dimension = [200]
-    num_features = [1000]
-    models = ["hetgp"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
+    problems = ["gld"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
 
-    return list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
+    budgets_per_dimension = [100]
+    num_features = [1000]
+    models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
+    dimensions = [2, 4, 6]
+    levels = [0.75, 0.9, 0.95]
+
+    batch_sizes = [50]
+    dimensions = [2]
+    levels = [0.95]
+
+    rules = ["GIBBON"]
+
+    all_conditions = list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,
                                   problem_name=problems,
                                   batch_size=batch_sizes,
                                   budget_per_dimension=budgets_per_dimension,
                                   num_features=num_features,
-                                  model=models)))
+                                  dimension=dimensions,
+                                  level=levels,
+                                  model=models,
+                                  rule=rules,
+                                  )))
+
+    # filtering out combinations that are not needed
+    all_conditions[:] = [
+        exp
+        for exp in all_conditions
+        if not (exp["model"] in ["hetgp", "GPR"] and exp["rule"] != "TS")
+    ]
+
+    return all_conditions

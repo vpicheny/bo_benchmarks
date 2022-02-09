@@ -31,7 +31,8 @@ from trieste.models.optimizer import Optimizer, BatchOptimizer
 
 from trieste.logging import get_step_number, get_tensorboard_writer
 
-from typing import Callable, Dict, Any, Optional
+from quantile.inducing_point_selector import InducingPointSelector, KMeans
+from typing import Callable, Dict, Any, Optional, Tuple
 from inducing_point_selector import InducingPointSelector, KMeans
 
 tf.keras.backend.set_floatx("float64")
@@ -45,7 +46,16 @@ def build_model(data, CONFIG, search_space, tb=None):
                                      lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
                                      num_inducing_points=CONFIG.num_inducing_points,
                                      inducing_point_selector=KMeans(search_space),
-                                     tb_callback=tb)
+                                     )
+    elif CONFIG.model == "homquantile":
+        return build_hetgp_rff_model(data=data,
+                                     num_features=CONFIG.num_features,
+                                     likelihood_distribution=
+                                     lambda loc, scale: ASymmetricLaplace(loc, scale, tau=CONFIG.problem.quantile_level),
+                                     num_inducing_points=CONFIG.num_inducing_points,
+                                     inducing_point_selector=KMeans(search_space),
+                                     homogeneous=True
+                                     )
     elif CONFIG.model == "hetgp":
         return build_hetgp_rff_model(data=data,
                                      num_features=CONFIG.num_features,
@@ -57,7 +67,8 @@ def build_model(data, CONFIG, search_space, tb=None):
                                      num_features=CONFIG.num_features,
                                      likelihood_distribution=tfp.distributions.Normal,
                                      num_inducing_points=CONFIG.num_inducing_points,
-                                     inducing_point_selector=KMeans(search_space))
+                                     inducing_point_selector=KMeans(search_space),
+                                     homogeneous=True)
     elif CONFIG.model == "GPR":
         return build_quantile_gpr_model(data,
                                         batch_size=CONFIG.batch_size,
@@ -176,7 +187,7 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
 
     def __init__(self,
                  model: DeepGP,
-                 optimizer: tf.optimizers.Optimizer | None = None,
+                 optimizer: BatchOptimizer | None = None,
                  inducing_point_selector: InducingPointSelector = None,
                  ):
 
@@ -191,6 +202,12 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
     def __repr__(self) -> str:
         """"""
         return f"FeaturedHetGPFluxModel({self.model_gpflux!r}, {self.optimizer.optimizer!r})"
+
+    def predict(self, query_points: TensorType) -> tuple[TensorType, TensorType]:
+        """Note: unless otherwise noted, this returns the mean and variance of the last layer
+        conditioned on one sample from the previous layers."""
+        mean, var = self.model_gpflux.predict_f(query_points)
+        return mean[..., 0:1], var[..., 0:1]
 
     def sample_trajectory(self) -> Callable:
         return sample_dgp(self.model_gpflux)
@@ -307,11 +324,84 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
                 # lr = self.model_keras.history.history['loss']
 
 
-def create_kernel_with_features(var, input_dim, num_features):
-    kernel = set_kernel(var, input_dim)
+def create_kernel_with_features(var, input_dim, num_features, lengthscale=0.2):
+    kernel = set_kernel(var, input_dim, lengthscale=lengthscale)
     coefficients = np.ones((num_features, 1), dtype=default_float())
     features = RandomFourierFeaturesCosine(kernel, num_features, dtype=default_float())
     return KernelWithFeatureDecomposition(kernel, features, coefficients)
+
+
+def covariance_between_points(
+        self, query_points_1: TensorType, query_points_2: TensorType
+    ) -> Tuple[TensorType]:
+    r"""
+    Compute the posterior covariance between sets of query points.
+    """
+
+    tf.debugging.assert_shapes([(query_points_1, [..., "A", "D"]), (query_points_2, ["B", "D"])])
+
+    kernel_pair = self.model_gpflux.f_layers[0].kernel
+    inducing_points = self.model_gpflux.f_layers[0].inducing_variable.inducing_variable.Z # [M,D]
+    q_sqrt_pair = self.model_gpflux.f_layers[0].q_sqrt # [L, M, M]
+
+    def _get_cov(kernel,q_sqrt):
+        K = kernel(inducing_points)  # [L, M, M]
+        Kx1 = kernel(inducing_points, query_points_1)  # [..., M, A]
+        Kx2 = kernel(inducing_points, query_points_2)  # [M, B]
+        K12 = kernel(query_points_1, query_points_2)  # [..., A, B]
+
+        if len(tf.shape(K)) == 2:
+            K = tf.expand_dims(K, -3)
+            Kx1 = tf.expand_dims(Kx1, -3)
+            Kx2 = tf.expand_dims(Kx2, -3)
+            K12 = tf.expand_dims(K12, -3)
+        elif len(tf.shape(K)) > 3:
+            raise NotImplementedError(
+                "Covariance between points is not supported " "for kernels of type " f"{type(kernel)}."
+            )
+
+        L = tf.linalg.cholesky(K)  # [L, M, M]
+        Linv_Kx1 = tf.linalg.triangular_solve(L, Kx1)  # [..., L, M, A]
+        Linv_Kx2 = tf.linalg.triangular_solve(L, Kx2)  # [..., L, M, B]
+
+        def _leading_mul(M_1: TensorType, M_2: TensorType, transpose_a: bool) -> TensorType:
+            if transpose_a:  # The einsum below is just A^T*B over the last 2 dimensions.
+                return tf.einsum("...lji,ljk->...lik", M_1, M_2)
+            else:  # The einsum below is just A*B^T over the last 2 dimensions.
+                return tf.einsum("...lij,lkj->...lik", M_1, M_2)
+
+        if self.model_gpflux.f_layers[0]:
+            first_cov_term = _leading_mul(
+                _leading_mul(Linv_Kx1, q_sqrt, transpose_a=True),  # [..., L, A, M]
+                _leading_mul(Linv_Kx2, q_sqrt, transpose_a=True),  # [..., L, B, M]
+                transpose_a=False,
+            )  # [..., L, A, B]
+        else:
+            Linv_qsqrt = tf.linalg.triangular_solve(L, q_sqrt)  # [L, M, M]
+            first_cov_term = _leading_mul(
+                _leading_mul(Linv_Kx1, Linv_qsqrt, transpose_a=True),  # [..., L, A, M]
+                _leading_mul(Linv_Kx2, Linv_qsqrt, transpose_a=True),  # [..., L, B, M]
+                transpose_a=False,
+            )  # [..., L, A, B]
+
+        second_cov_term = K12  # [..., L, A, B]
+        third_cov_term = _leading_mul(Linv_Kx1, Linv_Kx2, transpose_a=True)  # [..., L, A, B]
+        cov = first_cov_term + second_cov_term - third_cov_term  # [..., L, A, B]
+
+        tf.debugging.assert_shapes(
+            [
+                (query_points_1, [..., "N", "D"]),
+                (query_points_2, ["M", "D"]),
+                (cov, [..., "L", "N", "M"]),
+            ]
+        )
+        return cov
+
+    cov_f = _get_cov(kernel_pair.kernels[0],q_sqrt_pair[0:1,:,:])
+    cov_g = _get_cov(kernel_pair.kernels[1],q_sqrt_pair[1:2,:,:])
+
+    return cov_f, cov_g
+
 
 def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_inducing_points,
                           inducing_point_selector, homogeneous=False):
@@ -344,11 +434,11 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     likelihood_layer = gpflux.layers.LikelihoodLayer(likelihood)
     model = gpflux.models.DeepGP([layer], likelihood_layer)
 
-    epochs = 300
+    epochs = 100
     batch_size = 200
 
     callbacks = [gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=1, min_lr=1e-6),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=0, min_lr=1e-6),
         tf.keras.callbacks.EarlyStopping(monitor="loss", patience=50, min_delta=0.01, verbose=0, mode="min"),]
 
     fit_args = {
@@ -357,7 +447,8 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         "verbose": 0,
         "callbacks": callbacks,
     }
-    optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
+    # optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
+    optimizer = BatchOptimizer(tf.optimizers.Adam(0.01), fit_args)
 
     return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, #fit_args=fit_args,
                                   inducing_point_selector=inducing_point_selector)
@@ -469,8 +560,8 @@ def build_quantile_gpr_model(data, batch_size, quantile_level):
                                      optimizer=BatchOptimizer(tf.optimizers.Adam(), batch_size=100))
 
 
-def set_kernel(var, input_dim):
-    kernel = gpflow.kernels.Matern52(variance=var, lengthscales=0.2 * np.ones(input_dim, ))
+def set_kernel(var, input_dim, lengthscale=0.2):
+    kernel = gpflow.kernels.Matern52(variance=var, lengthscales=lengthscale * np.ones(input_dim, ))
     prior_scale = tf.cast(1.0, dtype=tf.float64)
     kernel.variance.prior = tfp.distributions.LogNormal(tf.cast(0.0, dtype=tf.float64), prior_scale)
     kernel.lengthscales.prior = tfp.distributions.LogNormal(tf.math.log(kernel.lengthscales), prior_scale)
@@ -524,10 +615,6 @@ class HeteroskedasticGaussian(gpflow.likelihoods.Likelihood):
     def _predict_mean_and_var(self, Fmu, Fvar):
         raise NotImplementedError
 
-#
-# quantile_level = 0.9
-# beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=0.9).numpy()
-#
 
 def unique_points_2d(points):
     new_points = points[0:1, :]
@@ -536,3 +623,67 @@ def unique_points_2d(points):
         if not tf.reduce_any(is_point_present):
             new_points = tf.concat([new_points, points[(i+1):(i+2), :]], axis=0)
     return new_points
+
+
+class CVaRLoss(Laplace):
+    def __init__(self,
+                 loc,
+                 scale,
+                 tau,
+                 num_data,
+                 validate_args=False,
+                 allow_nan_stats=True,
+                 name='Laplace'):
+
+        super().__init__(loc, scale, validate_args, allow_nan_stats, name)
+        self.tau = tau
+        self.num_data = num_data
+
+    def _mean(self):
+        loc = tf.convert_to_tensor(self.loc)
+        return tf.broadcast_to(loc, self._batch_shape_tensor(loc=loc))
+
+    def _stddev(self):
+        scale = tf.convert_to_tensor(self.scale)
+        return tf.broadcast_to(np.sqrt(2.) * scale,
+                               self._batch_shape_tensor(scale=scale))
+
+    def _variance(self):
+        scale = tf.convert_to_tensor(self.scale)
+        return tf.broadcast_to(2. * scale ** 2,
+                               self._batch_shape_tensor(scale=scale))
+
+    def _log_prob(self, x):
+        loc = tf.convert_to_tensor(self.loc)
+        scale = tf.convert_to_tensor(self.scale)
+        z = (x - loc) / scale
+        is_neg = 0.5 - 0.5 * tf.sign(z)
+        return tf.math.log(self.tau * (1 - self.tau) / scale) - ((1. - self.tau) * loc * self.num_data / self.scale + z * (1. - is_neg) )
+        # return tf.math.log(self.tau * (1 - self.tau) / scale) - z * (1. - is_neg)
+
+    def _z(self, x):
+        return (x - self.loc) / self.scale
+
+    def _cdf(self, x):
+        return NotImplementedError
+
+    def _log_cdf(self, x):
+        return NotImplementedError
+
+    def _quantile(self, p):
+        return NotImplementedError
+
+    def _sample_n(self, n, seed=None):
+        return NotImplementedError
+
+    def _log_survival_function(self, x):
+        return NotImplementedError
+
+    def _entropy(self):
+        return NotImplementedError
+
+    def _median(self):
+        return NotImplementedError
+
+    def _mode(self):
+        return NotImplementedError

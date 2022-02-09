@@ -5,7 +5,7 @@ from trieste.ask_tell_optimization import AskTellOptimizer
 from model_utils import build_model
 from acquisition_utils import create_initial_query_points, create_acquisition_rule, extract_current_best_quantile
 from trieste.data import Dataset
-
+from config import make_all_configs, make_config
 
 def make_observer(CONFIG):
     if CONFIG.model == "GPR":
@@ -33,14 +33,31 @@ def run_quantile_experiment(CONFIG):
     num_iterations = np.int((CONFIG.budget - data.observations.shape[0]) / CONFIG.batch_size)
 
     all_best_x = extract_current_best_quantile(ask_tell, CONFIG)
+    all_best_x = tf.repeat(all_best_x, data.observations.shape[0], axis=0)
 
     for iteration_count in range(num_iterations):
         query_points = ask_tell.ask()
         new_data = observer(query_points)
         ask_tell.tell(new_data)
         current_best_x = extract_current_best_quantile(ask_tell, CONFIG)
-        all_best_x = tf.concat([all_best_x, current_best_x], axis=0)
 
-    # result = ask_tell.to_result()
+        all_best_x = tf.concat(
+            [all_best_x, tf.repeat(current_best_x, new_data.observations.shape[0], axis=0)], 0,
+        )
+
     all_best_y = CONFIG.problem.quantile_fun(all_best_x)
     return ask_tell, all_best_x, all_best_y
+
+
+
+
+if __name__ == "__main__":
+
+    config = make_all_configs()[0]
+    config["model"] = "quantile"
+    CONFIG = make_config(config)
+    from IPython import embed
+
+    run_quantile_experiment(CONFIG)
+
+

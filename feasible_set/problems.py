@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tensorflow as tf
-from trieste.objectives import BRANIN_SEARCH_SPACE, scaled_branin
+from trieste.objectives import BRANIN_SEARCH_SPACE, scaled_branin, HARTMANN_6_SEARCH_SPACE, hartmann_6
 from trieste.observer import Observer
 from trieste.space import Box
 from trieste.types import TensorType
@@ -31,6 +31,22 @@ def get_problem(name):
             lambda qp: Dataset(qp, scaled_branin(qp)),
             n_global=10000 * problem.dim,
             n_boundary = 2000 * problem.dim,
+            threshold=problem.threshold,
+        )
+        problem.global_test_points = global_points
+        problem.boundary_test_points = boundary_points
+        return problem
+    elif name == "hartmann_6":
+        problem.fun = hartmann_6
+        problem.lower_bounds = HARTMANN_6_SEARCH_SPACE.lower
+        problem.upper_bounds = HARTMANN_6_SEARCH_SPACE.upper
+        problem.dim = HARTMANN_6_SEARCH_SPACE.dimension
+        problem.threshold = 1.
+        global_points, boundary_points = _get_feasible_set_test_data(
+            HARTMANN_6_SEARCH_SPACE,
+            lambda qp: Dataset(qp, problem.fun(qp)),
+            n_global= 50000,
+            n_boundary = 5000,
             threshold=problem.threshold,
         )
         problem.global_test_points = global_points

@@ -3,6 +3,11 @@ import tensorflow_probability as tfp
 from trieste.objectives import scaled_branin, hartmann_3, SCALED_BRANIN_MINIMUM
 from trieste.space import Box
 from scipy.stats import norm
+from quantile.gld_problems import create_gld_trajectory
+from trieste.acquisition.optimizer import automatic_optimizer_selector, generate_continuous_optimizer
+from trieste.acquisition import AcquisitionFunction
+from trieste.space import Box
+
 
 class Problem:
     fun = None
@@ -14,11 +19,22 @@ class Problem:
     minimum:float
 
 
-def get_problem(name):
+class DummyAcquisition(AcquisitionFunction):
+
+    def __init__(self, fun):
+        self._fun = fun
+
+    def __call__(self, x):
+        return -self._fun(tf.squeeze(x, -2))
+
+
+def get_problem(problem_specs: [str, int, int, float]):
+
+    name, seed, input_dim, quantile_level = problem_specs
+
     problem = Problem
     if name == "gauss_noise_branin":
         noise = .1
-        quantile_level = 0.75
 
         beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
 
@@ -45,7 +61,6 @@ def get_problem(name):
 
     elif name == "exp_noise_branin":
         noise = .1
-        quantile_level = 0.9
 
         beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
 
@@ -72,7 +87,6 @@ def get_problem(name):
 
     elif name == "hartmann_3":
         noise = .1
-        quantile_level = 0.9
 
         beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
 
@@ -98,7 +112,6 @@ def get_problem(name):
         return problem
 
     elif name == "flat_branin_noise":
-        quantile_level = 0.9
 
         beta = tfp.distributions.Normal(loc=0., scale=1.).quantile(value=quantile_level).numpy()
 
@@ -122,8 +135,6 @@ def get_problem(name):
         return problem
 
     elif name == "1d":
-
-        quantile_level = 0.9
 
         def noisefree_fun(x):
             return tf.sin(x * 3.14 * 2.) + .25 * x
@@ -159,8 +170,40 @@ def get_problem(name):
         problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 100000)
         return problem
 
+    elif name == "gld":
 
-def get_minimum(fun, lb, ub, num_samples):
-    points = Box(lb, ub).sample(num_samples)
-    y = fun(points)
-    return tf.reduce_min(y).numpy()
+        fun, quantile_fun = create_gld_trajectory(input_dim=input_dim, lengthscale=0.5, seed=seed, tau=quantile_level)
+
+        problem.lower_bounds = [0.] * input_dim
+        problem.upper_bounds = [1.] * input_dim
+        problem.fun = fun
+        problem.quantile_fun = quantile_fun
+        problem.quantile_level = quantile_level
+        problem.dim = input_dim
+        problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 100000, 10)
+        return problem
+
+
+def get_minimum(fun, lb, ub, num_samples, num_batches=1):
+
+    print("finding minimum")
+    search_space = Box(lb, ub)
+    acquisition_function = DummyAcquisition(fun)
+    optimizer = generate_continuous_optimizer(num_initial_samples=5000, num_optimization_runs=50)
+    point = optimizer(search_space, acquisition_function)
+    return fun(point)
+
+
+    # print("Computing min by MC")
+    # current_min = 1e16
+    # for _ in range(num_batches):
+    #     points = Box(lb, ub).sample(num_samples)
+    #     y = fun(points)
+    #     new_min = tf.reduce_min(y).numpy()
+    #     print(new_min)
+    #     if new_min < current_min:
+    #         current_min = new_min
+    #
+    # # return current_min
+    #
+    # return fun(point)

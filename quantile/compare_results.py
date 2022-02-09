@@ -19,13 +19,14 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
             ax.plot(x[:, None], regret.T, linewidth=.5, color=col)
     ax.legend(handles=lines, loc='lower right')
     ax.set_title(title)
-    ax.set_xlabel("Iteration")
+    ax.set_xlabel("# of evaluations")
     ax.set_ylabel(ylabel)
     return fig
 
 
-dir = "results_prior"
-pb_tags = {"gauss_noise_branin", "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
+dir = "results_gld"
+pb_tags = {"gld_dim_2_q_0.9", "gld_dim_2_q_0.75", "gld_dim_2_q_0.95"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
+# pb_tags = {"gld_dim_2_q_0.75"}
 
 for tag in pb_tags:
     print(f"Processing results for {tag}")
