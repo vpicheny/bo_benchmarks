@@ -7,6 +7,7 @@ import tensorflow_probability as tfp
 from scipy.optimize import bisect
 from trieste.data import Dataset
 from trieste.space import SearchSpace
+from trieste.acquisition.function.entropy import GIBBONModelType
 from trieste.acquisition.rule import OBJECTIVE, EfficientGlobalOptimization
 from trieste.acquisition.interface import SingleModelGreedyAcquisitionBuilder, AcquisitionFunction,  PenalizationFunction
 from trieste.acquisition.function import ExpectedImprovement, MinValueEntropySearch, min_value_entropy_search, LocalPenalization, GIBBON, gibbon_repulsion_term, gibbon_quality_term

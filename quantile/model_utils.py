@@ -403,7 +403,6 @@ def covariance_between_points(
     return cov_f, cov_g
 
 
-
 def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_inducing_points,
                           inducing_point_selector, homogeneous=False):
     num_data, input_dim = data.query_points.shape
