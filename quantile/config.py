@@ -69,7 +69,7 @@ def make_all_configs():
     dimensions = [2]
     levels = [0.95]
 
-    rules = ["TS", "MES"]
+    rules = ["GIBBON"]
 
     all_conditions = list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,

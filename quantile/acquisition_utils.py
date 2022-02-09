@@ -20,6 +20,10 @@ from model_utils import FeaturedHetGPFluxModel
 
 tf.keras.backend.set_floatx("float64")
 
+from entropy_utils import MinValueEntropySearchForQuantile, GIBBONForQuantile
+from lp_utils import LocalPenalizationForQuantile, soft_local_penalizer_for_quantile, hard_local_penalizer_for_quantile
+
+
 
 def create_initial_query_points(search_space, CONFIG):
     if CONFIG.model == "GPR":
@@ -30,6 +34,7 @@ def create_initial_query_points(search_space, CONFIG):
 
 
 def create_acquisition_rule(CONFIG):
+
     if CONFIG.model in ["quantile", "homquantile"]:
         if CONFIG.rule == "TS":
             acq_function = NegativeGaussianProcessTrajectory()
@@ -50,6 +55,19 @@ def create_acquisition_rule(CONFIG):
                 base_acquisition_function_builder=base_builder
             )
             return trieste.acquisition.rule.EfficientGlobalOptimization(acq_function.using(OBJECTIVE),
+                                                                        num_query_points=CONFIG.batch_size)
+        elif CONFIG.rule == "GIBBON":
+            search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
+            d = tf.shape(CONFIG.problem.lower_bounds)[0]
+
+            gibbon_acq = GIBBONForQuantile(
+                search_space,
+                quantile_level=CONFIG.problem.quantile_level,
+                num_samples=10,
+                grid_size=10_000 * d,
+            )
+
+            return trieste.acquisition.rule.EfficientGlobalOptimization(gibbon_acq.using(OBJECTIVE),
                                                                         num_query_points=CONFIG.batch_size)
         else:
             raise NotImplementedError(f"Wrong rule, received {CONFIG.rule}")
