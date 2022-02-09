@@ -377,8 +377,8 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
             )
             return cov
 
-        cov_f = _get_cov(kernel.kernels[0],q_sqrt[0:1,:,:])
-        cov_g = _get_cov(kernel.kernels[1],q_sqrt[1:2,:,:])
+        cov_f = _get_cov(kernel_pair.kernels[0],q_sqrt_pair[0:1,:,:])
+        cov_g = _get_cov(kernel_pair.kernels[1],q_sqrt_pair[1:2,:,:])
 
         return cov_f, cov_g
 

@@ -86,10 +86,10 @@ class GIBBONForQuantile(GIBBON):
         else:
             # otherwise construct a new repulsion term and acquisition function
             self._diversity_term = gibbon_repulsion_term_for_quantile(
-                model, pending_points, rescaled_repulsion=self._rescaled_repulsion
+                model, pending_points, rescaled_repulsion=self._rescaled_repulsion, quantile_level = self._quantile_level
             )
 
-            @tf.function
+            #@tf.function
             def gibbon_acquisition(x: TensorType) -> TensorType:
                 return cast(PenalizationFunction, self._diversity_term)(x) + cast(
                     AcquisitionFunction, self._quality_term
@@ -122,6 +122,7 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         self,
         model: SupportsCovarianceObservationNoise,
         pending_points: TensorType,
+        quantile_level: float,
         rescaled_repulsion: bool = True,
     ):
         tf.debugging.assert_rank(pending_points, 2)
@@ -130,15 +131,16 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         self._model = model
         self._pending_points = tf.Variable(pending_points, shape=[None, *pending_points.shape[1:]])
         self._rescaled_repulsion = rescaled_repulsion
+        self._quantile_level = quantile_level
 
 
-
-    @tf.function
+    #@tf.function
     def __call__(self, x: TensorType) -> TensorType:
         tf.debugging.assert_shapes(
             [(x, [..., 1, None])],
             message="This penalization function cannot be calculated for batches of points.",
         )
+
 
         tau = self._quantile_level
         const = (1 - 2.0 * tau)**2 / ((tau**2)*((1-tau)**2))
@@ -151,30 +153,59 @@ class gibbon_repulsion_term_for_quantile(gibbon_repulsion_term):
         f_var = combined_var[:,:,0] # [N, 1]
         g_mean = combined_mean[:,:,1] # [N, 1]
         g_var = combined_var[:,:,1] # [N, 1]
-        y_var = ?
 
+        # calc variance of y
+        term_1 = tf.math.exp(2*(g_mean+g_var)) # [N, 1]
+        term_1 = (1. - 2. * tau + 2. * tau**2) /((tau**2) * ((1. - tau)**2)) * term_1 # [N, 1]
+        term_2 = (tf.math.exp(g_var) - 1) * tf.math.exp(2*g_mean + g_var) # [N, 1]
+        term_2 = ((1. -2. * tau)**2) /((tau**2) * ((1. - tau)**2)) * term_2 # [N, 1]
+        term_2 = term_2 + f_var # [N, 1]
+        y_var = term_1 + term_2 # [N, 1]
 
+        # calc predictions for pending points
+        combined_pending_mean, combined_pending_var = self._model.model_gpflux.f_layers[0].predict(self._pending_points)  # [m, 2]
+        _, combined_pending_covar = self._model.model_gpflux.f_layers[0].predict(self._pending_points, full_cov=True)  # [1, m,m]
+        f_mean_pending = combined_pending_mean[:,:1] # [m, 1]
+        g_mean_pending = combined_pending_mean[:,1:2] # [m, 1]
+        f_var_pending = combined_pending_var[:,:1] # [m, 1]
+        g_var_pending = combined_pending_var[:,1:2] # [m, 1]
+        f_covar_pending = combined_pending_covar[0,:,:] # [m, m]
+        g_covar_pending = combined_pending_covar[1,:,:] # [m, m]
 
-        _, combined_B = self._model.model_gpflux.f_layers[0].predict(self._pending_points, full_cov=True)  # [2, m, m]
-        B_f = combined_B[:1,:,:]
-        B_g = combined_B[1:2,:,:]
+        # calc covariance between pending points
+        sigma_covar_pending = g_mean_pending + tf.transpose(g_mean_pending) # [m,m]
+        sigma_covar_pending += (g_var_pending +tf.transpose(g_var_pending))/0.5 # [m,m]
+        sigma_covar_pending = tf.math.exp(sigma_covar_pending)*(tf.math.exp(g_covar_pending)) # [m,m]
+        y_covar_pending = f_covar_pending + const * sigma_covar_pending
+        B = y_covar_pending # [m, m]
+        B = tf.expand_dims(B,0) # [1, m , m]
+
+        # calculate covariance between candidate and pending points
+        covars = self._model.covariance_between_points(tf.squeeze(x, -2), self._pending_points)
         
-        B = B_f + const * B_g 
-        L = tf.linalg.cholesky(B)
+        f_covar = covars[0][0] # [1, N, m]
+        g_covar = covars[1][0] # [1, N, m] 
+        sigma_covar = g_mean + tf.transpose(g_mean_pending) # [N,m]
+        sigma_covar += (g_var_pending + tf.transpose(g_var_pending)) / 0.5
+        sigma_covar = tf.math.exp(sigma_covar) * tf.math.exp(g_covar)
+        y_covar = f_covar + const * sigma_covar
+        A = y_covar # [N, m]
+        A = tf.expand_dims(A, -1) # [N, m , 1]
 
-        covs = self._model.covariance_between_points(tf.squeeze(x, -2), self._pending_points),
-        cov_f = covs[0] # [1, N, m]
-        cov_g = covs[1] # [1, N, m]
-        cov_f = tf.squeeze(tf.expand_dims(cov_f, axis=-1),axis=0) # [N, m, 1]
-        cov_g = tf.squeeze(tf.expand_dims(cov_g, axis=-1),axis=0) # [N, m, 1]
-        A = cov_f + const * cov_g # THIS IS WRONG
 
+ 
 
+        # efficiently calc det of covariance
+        L = tf.linalg.cholesky(B) # [m, m]
         L_inv_A = tf.linalg.triangular_solve(L, A)
         V_det = yvar - tf.squeeze(
             tf.matmul(L_inv_A, L_inv_A, transpose_a=True), -1
         )  # equation for determinant of block matrices
         repulsion = 0.5 * (tf.math.log(V_det) - tf.math.log(yvar))
+
+        from IPython import embed
+        embed()
+
 
 
         if self._rescaled_repulsion:
