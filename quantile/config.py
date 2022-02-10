@@ -58,14 +58,14 @@ def make_all_configs():
     seeds = np.arange(10)
     problems = ["gld"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
 
-    budgets_per_dimension = [100]
+    budgets_per_dimension = [300]
     num_features = [1000]
-    models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
-    dimensions = [2, 4, 6]
-    levels = [0.75, 0.9, 0.95]
-
+    # models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
+    # dimensions = [2, 4, 6]
+    # levels = [0.75, 0.9, 0.95]
+    models = ["quantile"]
     batch_sizes = [50]
-    dimensions = [2]
+    dimensions = [3]
     levels = [0.95]
 
     rules = ["GIBBON"]
