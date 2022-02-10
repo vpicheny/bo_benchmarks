@@ -324,83 +324,85 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
                 # lr = self.model_keras.history.history['loss']
 
 
+    def covariance_between_points(
+            self, query_points_1: TensorType, query_points_2: TensorType
+        ) -> Tuple[TensorType]:
+        r"""
+        Compute the posterior covariance between sets of query points.
+        """
+        jitter = 1e-6
+
+        tf.debugging.assert_shapes([(query_points_1, [..., "A", "D"]), (query_points_2, ["B", "D"])])
+
+        kernel_pair = self.model_gpflux.f_layers[0].kernel
+        inducing_points = self.model_gpflux.f_layers[0].inducing_variable.inducing_variable.Z # [M,D]
+        q_sqrt_pair = self.model_gpflux.f_layers[0].q_sqrt # [L, M, M]
+
+        def _get_cov(kernel,q_sqrt):
+            K = kernel(inducing_points)  # [L, M, M]
+            Kx1 = kernel(inducing_points, query_points_1)  # [..., M, A]
+            Kx2 = kernel(inducing_points, query_points_2)  # [M, B]
+            K12 = kernel(query_points_1, query_points_2)  # [..., A, B]
+
+            if len(tf.shape(K)) == 2:
+                K = tf.expand_dims(K, -3)
+                Kx1 = tf.expand_dims(Kx1, -3)
+                Kx2 = tf.expand_dims(Kx2, -3)
+                K12 = tf.expand_dims(K12, -3)
+            elif len(tf.shape(K)) > 3:
+                raise NotImplementedError(
+                    "Covariance between points is not supported " "for kernels of type " f"{type(kernel)}."
+                )
+
+            s = jitter * tf.eye(K.shape[-2], batch_shape=K.shape[:-2], dtype=K.dtype)
+            L = tf.linalg.cholesky(K + s)  # [L, M, M]
+            Linv_Kx1 = tf.linalg.triangular_solve(L, Kx1)  # [..., L, M, A]
+            Linv_Kx2 = tf.linalg.triangular_solve(L, Kx2)  # [..., L, M, B]
+
+            def _leading_mul(M_1: TensorType, M_2: TensorType, transpose_a: bool) -> TensorType:
+                if transpose_a:  # The einsum below is just A^T*B over the last 2 dimensions.
+                    return tf.einsum("...lji,ljk->...lik", M_1, M_2)
+                else:  # The einsum below is just A*B^T over the last 2 dimensions.
+                    return tf.einsum("...lij,lkj->...lik", M_1, M_2)
+
+            if self.model_gpflux.f_layers[0]:
+                first_cov_term = _leading_mul(
+                    _leading_mul(Linv_Kx1, q_sqrt, transpose_a=True),  # [..., L, A, M]
+                    _leading_mul(Linv_Kx2, q_sqrt, transpose_a=True),  # [..., L, B, M]
+                    transpose_a=False,
+                )  # [..., L, A, B]
+            else:
+                Linv_qsqrt = tf.linalg.triangular_solve(L, q_sqrt)  # [L, M, M]
+                first_cov_term = _leading_mul(
+                    _leading_mul(Linv_Kx1, Linv_qsqrt, transpose_a=True),  # [..., L, A, M]
+                    _leading_mul(Linv_Kx2, Linv_qsqrt, transpose_a=True),  # [..., L, B, M]
+                    transpose_a=False,
+                )  # [..., L, A, B]
+
+            second_cov_term = K12  # [..., L, A, B]
+            third_cov_term = _leading_mul(Linv_Kx1, Linv_Kx2, transpose_a=True)  # [..., L, A, B]
+            cov = first_cov_term + second_cov_term - third_cov_term  # [..., L, A, B]
+
+            tf.debugging.assert_shapes(
+                [
+                    (query_points_1, [..., "N", "D"]),
+                    (query_points_2, ["M", "D"]),
+                    (cov, [..., "L", "N", "M"]),
+                ]
+            )
+            return cov
+
+        cov_f = _get_cov(kernel_pair.kernels[0],q_sqrt_pair[0:1,:,:])
+        cov_g = _get_cov(kernel_pair.kernels[1],q_sqrt_pair[1:2,:,:])
+
+        return cov_f, cov_g
+
+
 def create_kernel_with_features(var, input_dim, num_features, lengthscale=0.2):
     kernel = set_kernel(var, input_dim, lengthscale=lengthscale)
     coefficients = np.ones((num_features, 1), dtype=default_float())
     features = RandomFourierFeaturesCosine(kernel, num_features, dtype=default_float())
     return KernelWithFeatureDecomposition(kernel, features, coefficients)
-
-
-def covariance_between_points(
-        self, query_points_1: TensorType, query_points_2: TensorType
-    ) -> Tuple[TensorType]:
-    r"""
-    Compute the posterior covariance between sets of query points.
-    """
-
-    tf.debugging.assert_shapes([(query_points_1, [..., "A", "D"]), (query_points_2, ["B", "D"])])
-
-    kernel_pair = self.model_gpflux.f_layers[0].kernel
-    inducing_points = self.model_gpflux.f_layers[0].inducing_variable.inducing_variable.Z # [M,D]
-    q_sqrt_pair = self.model_gpflux.f_layers[0].q_sqrt # [L, M, M]
-
-    def _get_cov(kernel,q_sqrt):
-        K = kernel(inducing_points)  # [L, M, M]
-        Kx1 = kernel(inducing_points, query_points_1)  # [..., M, A]
-        Kx2 = kernel(inducing_points, query_points_2)  # [M, B]
-        K12 = kernel(query_points_1, query_points_2)  # [..., A, B]
-
-        if len(tf.shape(K)) == 2:
-            K = tf.expand_dims(K, -3)
-            Kx1 = tf.expand_dims(Kx1, -3)
-            Kx2 = tf.expand_dims(Kx2, -3)
-            K12 = tf.expand_dims(K12, -3)
-        elif len(tf.shape(K)) > 3:
-            raise NotImplementedError(
-                "Covariance between points is not supported " "for kernels of type " f"{type(kernel)}."
-            )
-
-        L = tf.linalg.cholesky(K)  # [L, M, M]
-        Linv_Kx1 = tf.linalg.triangular_solve(L, Kx1)  # [..., L, M, A]
-        Linv_Kx2 = tf.linalg.triangular_solve(L, Kx2)  # [..., L, M, B]
-
-        def _leading_mul(M_1: TensorType, M_2: TensorType, transpose_a: bool) -> TensorType:
-            if transpose_a:  # The einsum below is just A^T*B over the last 2 dimensions.
-                return tf.einsum("...lji,ljk->...lik", M_1, M_2)
-            else:  # The einsum below is just A*B^T over the last 2 dimensions.
-                return tf.einsum("...lij,lkj->...lik", M_1, M_2)
-
-        if self.model_gpflux.f_layers[0]:
-            first_cov_term = _leading_mul(
-                _leading_mul(Linv_Kx1, q_sqrt, transpose_a=True),  # [..., L, A, M]
-                _leading_mul(Linv_Kx2, q_sqrt, transpose_a=True),  # [..., L, B, M]
-                transpose_a=False,
-            )  # [..., L, A, B]
-        else:
-            Linv_qsqrt = tf.linalg.triangular_solve(L, q_sqrt)  # [L, M, M]
-            first_cov_term = _leading_mul(
-                _leading_mul(Linv_Kx1, Linv_qsqrt, transpose_a=True),  # [..., L, A, M]
-                _leading_mul(Linv_Kx2, Linv_qsqrt, transpose_a=True),  # [..., L, B, M]
-                transpose_a=False,
-            )  # [..., L, A, B]
-
-        second_cov_term = K12  # [..., L, A, B]
-        third_cov_term = _leading_mul(Linv_Kx1, Linv_Kx2, transpose_a=True)  # [..., L, A, B]
-        cov = first_cov_term + second_cov_term - third_cov_term  # [..., L, A, B]
-
-        tf.debugging.assert_shapes(
-            [
-                (query_points_1, [..., "N", "D"]),
-                (query_points_2, ["M", "D"]),
-                (cov, [..., "L", "N", "M"]),
-            ]
-        )
-        return cov
-
-    cov_f = _get_cov(kernel_pair.kernels[0],q_sqrt_pair[0:1,:,:])
-    cov_g = _get_cov(kernel_pair.kernels[1],q_sqrt_pair[1:2,:,:])
-
-    return cov_f, cov_g
 
 
 def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_inducing_points,
