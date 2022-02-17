@@ -1,5 +1,5 @@
 from config import make_all_configs, make_config
-from quantile.run_experiments_with_ray import run_single_experiment
+from run_experiments_with_ray import run_single_experiment
 
 configs = make_all_configs()
 
