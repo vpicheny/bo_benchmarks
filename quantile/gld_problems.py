@@ -15,7 +15,7 @@ from gpflow.inducing_variables import (
     SharedIndependentInducingVariables,
 )
 
-from quantile.model_utils import create_kernel_with_features
+from model_utils import create_kernel_with_features
 from plotting import  create_grid, plot_function_2d, plot_surface
 
 
@@ -58,7 +58,8 @@ class GLD(ABC):
             tau = tau[:, None, None]
 
         lambda0 = lambda_val[None, :, :, 0] * 2.
-        lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 3.) / 4.
+        lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 4.) / 2.
+        # lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 1.) / 3.
         lambda2 = lambda_val[None, :, :, 2] * .2
         lambda3 = lambda_val[None, :, :, 3] * .2
 
@@ -129,6 +130,8 @@ def create_gld_trajectory(input_dim, lengthscale, seed, tau):
 
     fun = tf.function(lambda at: gld.sample(trajectory(at)[None, ...]) - 4. * tf.reduce_sum((at - 0.5) ** 2, axis=-1)[..., None])
     quantile_fun = tf.function(lambda at: gld.quantile(tau=tau, lambda_val=trajectory(at)[None, ...])[0, 0, ..., None] - 4. * tf.reduce_sum((at - 0.5) ** 2, axis=-1)[..., None])
+    # fun = lambda at: gld.sample(trajectory(at)[None, ...])
+    # quantile_fun = tf.function(lambda at: gld.quantile(tau=tau, lambda_val=trajectory(at)[None, ...])[0, 0, ..., None])
 
     return fun, quantile_fun
 

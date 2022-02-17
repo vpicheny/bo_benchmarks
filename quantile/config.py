@@ -18,7 +18,7 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_gld_quad"
+    results_dir:str = "results_quad"
     dimension: int = None
     rule:float = "TS"
 
@@ -60,6 +60,7 @@ def make_all_configs():
 
     budgets_per_dimension = [250]
     num_features = [1000]
+
     # models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
     # dimensions = [2, 4, 6]
     # levels = [0.75, 0.9, 0.95]

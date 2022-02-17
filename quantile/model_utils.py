@@ -20,7 +20,8 @@ from gpflux.models import DeepGP
 from gpflux.models.deep_gp import sample_dgp
 from gpflux.sampling.kernel_with_feature_decomposition import KernelWithFeatureDecomposition
 from gpflux.sampling.sample import efficient_sample, Sample
-from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
+# from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
+from gpflux.layers.basis_functions import RandomFourierFeatures as RandomFourierFeaturesCosine
 from gpflux.helpers import construct_basic_inducing_variables
 
 from trieste.data import Dataset
@@ -31,8 +32,7 @@ from trieste.models.optimizer import Optimizer, BatchOptimizer
 
 from trieste.logging import get_step_number, get_tensorboard_writer
 
-from quantile.inducing_point_selector import InducingPointSelector, KMeans
-from typing import Callable, Dict, Any, Optional, Tuple
+from typing import Callable, Dict, Any, Optional
 from inducing_point_selector import InducingPointSelector, KMeans
 
 tf.keras.backend.set_floatx("float64")
@@ -439,7 +439,8 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
     epochs = 100
     batch_size = 200
 
-    callbacks = [gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
+    # gpflux.callbacks.TensorBoard(log_dir="logs/tensorboard/"),
+    callbacks = [
         tf.keras.callbacks.ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5, verbose=0, min_lr=1e-6),
         tf.keras.callbacks.EarlyStopping(monitor="loss", patience=50, min_delta=0.01, verbose=0, mode="min"),]
 

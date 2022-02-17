@@ -3,10 +3,12 @@ import tensorflow_probability as tfp
 from trieste.objectives import scaled_branin, hartmann_3, SCALED_BRANIN_MINIMUM
 from trieste.space import Box
 from scipy.stats import norm
-from quantile.gld_problems import create_gld_trajectory
+
 from trieste.acquisition.optimizer import automatic_optimizer_selector, generate_continuous_optimizer
 from trieste.acquisition import AcquisitionFunction
 from trieste.space import Box
+
+from gld_problems import create_gld_trajectory
 
 
 class Problem:
@@ -178,8 +180,6 @@ def get_problem(problem_specs: [str, int, int, float]):
             lengthscale = 0.5
 
         fun, quantile_fun = create_gld_trajectory(input_dim=input_dim, lengthscale=lengthscale, seed=seed, tau=quantile_level)
-
-        # fun, quantile_fun = create_gld_trajectory(input_dim=input_dim, lengthscale=0.5, seed=seed, tau=quantile_level)
 
         problem.lower_bounds = [0.] * input_dim
         problem.upper_bounds = [1.] * input_dim
