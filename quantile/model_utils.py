@@ -330,7 +330,7 @@ class FeaturedHetGPFluxModel(DeepGaussianProcess):
         r"""
         Compute the posterior covariance between sets of query points.
         """
-        jitter = 1e-6
+        jitter = 1e-12
 
         tf.debugging.assert_shapes([(query_points_1, [..., "A", "D"]), (query_points_2, ["B", "D"])])
 
@@ -414,7 +414,7 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         kernel_with_features2 = create_kernel_with_features(1e-12, input_dim, num_features)
         gpflow.set_trainable(kernel_with_features2, False)
     else:
-        kernel_with_features2 = create_kernel_with_features(var / 2., input_dim, num_features)
+        kernel_with_features2 = create_kernel_with_features(1e-2, input_dim, num_features)
     kernel_list = [kernel_with_features1, kernel_with_features2]
     kernel = gpflux.helpers.construct_basic_kernel(kernel_list)
 

@@ -17,17 +17,25 @@ def run_single_experiment(config):
     except FileExistsError:
         print("Directory ", config.dirName, " already exists")
 
-    ask_tell, best_x, best_y = run_quantile_experiment(config)
-    X = ask_tell._datasets[OBJECTIVE].query_points.numpy()
-    Y = ask_tell._datasets[OBJECTIVE].observations.numpy()
     experiment_name = config.exp_name
-    np.save(f"{config.dirName}/{experiment_name}_X", X)
-    np.save(f"{config.dirName}/{experiment_name}_Y", Y)
-    np.save(f"{config.dirName}/{experiment_name}_best_x", best_x)
-    np.save(f"{config.dirName}/{experiment_name}_best_y", best_y)
-    np.save(f"{config.dirName}/{experiment_name}_regret", best_y - config.problem.minimum)
+    experiment_done = False
+    if os.path.exists(os.path.join(config.dirName, f"{experiment_name}_X.npy")):
+        experiment_done = True
 
-    print(f"finished experiment {experiment_name}")
+    if not experiment_done:
+        ask_tell, best_x, best_y = run_quantile_experiment(config)
+        X = ask_tell._datasets[OBJECTIVE].query_points.numpy()
+        Y = ask_tell._datasets[OBJECTIVE].observations.numpy()
+        experiment_name = config.exp_name
+        np.save(f"{config.dirName}/{experiment_name}_X", X)
+        np.save(f"{config.dirName}/{experiment_name}_Y", Y)
+        np.save(f"{config.dirName}/{experiment_name}_best_x", best_x)
+        np.save(f"{config.dirName}/{experiment_name}_best_y", best_y)
+        np.save(f"{config.dirName}/{experiment_name}_regret", best_y - config.problem.minimum)
+
+        print(f"finished experiment {experiment_name}")
+    else:
+        print(f"Skipping experiment {experiment_name}, already done!")
 
 
 if __name__ == "__main__":

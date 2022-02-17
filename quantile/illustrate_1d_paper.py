@@ -70,37 +70,37 @@ from plotting import create_grid, plot_surface
 
 
 # for quantile_level in quantile_levels:
-#     fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
+#     fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=lengthscale, seed=seed, tau=quantile_level)
     #
     # # Create a regular grid on the parameter space
     # Xplot, xx, yy = create_grid(mins=[0., 0.], maxs=[1., 1.], grid_density=30)
     # qfun = quantile_fun(Xplot).numpy()
     # plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
 
-seed = 12345
+seed = 241456789
+lengthscale=0.35
 
-fun, _ = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
+fun, _ = create_gld_trajectory(input_dim=2, lengthscale=lengthscale, seed=seed, tau=quantile_level)
 
-nrow = 4
-ncol = 4
-fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all", sharey="all")
-
-bins = np.linspace(-6., 6., 20)
-
-dim = 1
-for i in range(nrow):
-    for j in range(ncol):
-        x = np.random.uniform(0., 1., dim).reshape(-1, 1)
-        xx = np.repeat(x, 10000).reshape(10000, dim)
-        f = fun(xx).numpy()
-        ax[i, j].hist(f, bins)
+# nrow = 4
+# ncol = 4
+# fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all", sharey="all")
+#
+# bins = np.linspace(-6., 6., 20)
+#
+# dim = 1
+# for i in range(nrow):
+#     for j in range(ncol):
+#         x = np.random.uniform(0., 1., dim).reshape(-1, 1)
+#         xx = np.repeat(x, 10000).reshape(10000, dim)
+#         f = fun(xx).numpy()
+#         ax[i, j].hist(f, bins)
 
 # Set up problem
 observer = lambda qp: Dataset(qp, fun(qp))
 search_space = trieste.space.Box([0.], [1.])
 initial_query_points = search_space.sample(500)
 data = observer(initial_query_points)
-
 
 # Fit heterogeneous quantile model
 qhet_model = build_hetgp_rff_model(data=data,
@@ -111,23 +111,6 @@ qhet_model = build_hetgp_rff_model(data=data,
                                      inducing_point_selector=GridSampler(search_space))
 qhet_model.optimize(data)
 
-qhet_model2 = build_hetgp_rff_model(data=data,
-                                     num_features=1000,
-                                     likelihood_distribution=
-                                     lambda loc, scale: ASymmetricLaplace(loc, scale, tau=1. - quantile_level),
-                                     num_inducing_points=40,
-                                     inducing_point_selector=GridSampler(search_space))
-qhet_model2.optimize(data)
-
-# # Fit hetGP model
-# hetgp = build_hetgp_rff_model(data=data,
-#                               num_features=1000,
-#                               likelihood_distribution=tfp.distributions.Normal,
-#                               num_inducing_points=40,
-#                               inducing_point_selector=GridSampler(search_space))
-# hetgp.optimize(data)
-
-# Fit homogeneous quantile model
 qhom_model = build_hetgp_rff_model(data=data,
                                      num_features=1000,
                                      likelihood_distribution=
@@ -137,33 +120,24 @@ qhom_model = build_hetgp_rff_model(data=data,
                                 homogeneous=True)
 qhom_model.optimize(data)
 
-qhom_model2 = build_hetgp_rff_model(data=data,
-                                     num_features=1000,
-                                     likelihood_distribution=
-                                     lambda loc, scale: ASymmetricLaplace(loc, scale, tau=1. - quantile_level),
-                                     num_inducing_points=40,
-                                     inducing_point_selector=GridSampler(search_space),
-                                homogeneous=True)
-qhom_model2.optimize(data)
-
 x = np.linspace(0., 1., 1000)
 x = tf.constant(x.reshape(-1, 1), dtype=tf.float64)
 f = fun(x)
 
-nrows = 2
-ncols = 4
-fig, ax = plt.subplots(nrows, ncols, sharex='all', sharey='all')
+nrows = 1
+ncols = 2
+fig, ax = plt.subplots(nrows, ncols, sharex='all', sharey='row', squeeze=False)
 
-q_levels = [.05, .15, .25, .35, .45, .55, .65, .75, .85, .95]
-for ql in q_levels:
-    _, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=ql)
-    q = quantile_fun(x)
-    ax[0,0].plot(x.numpy(), q.numpy())
-    ax[1, 0].plot(x.numpy(), q.numpy())
+# q_levels = [.05, .15, .25, .35, .45, .55, .65, .75, .85, .95]
+# for ql in q_levels:
+#     _, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=lengthscale, seed=seed, tau=ql)
+#     q = quantile_fun(x)
+#     ax[0,0].plot(x.numpy(), q.numpy())
+#     # ax[1, 0].plot(x.numpy(), q.numpy())
 
-_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
+_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=lengthscale, seed=seed, tau=quantile_level)
 q_act1 = quantile_fun(x)
-_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=1. - quantile_level)
+_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=lengthscale, seed=seed, tau=1. - quantile_level)
 q_act2 = quantile_fun(x)
 
 q_act = tf.concat([q_act1, q_act2], axis=-1)
@@ -174,59 +148,26 @@ for row in range(nrows):
 
 # hetQuantile plot
 qhet_mean, qhet_var = qhet_model.model_gpflux.predict_f(x)
-ax[0,1].plot(x.numpy(), qhet_mean[:, 0].numpy(), color="green", linewidth=3)
+ax[0,0].plot(x.numpy(), qhet_mean[:, 0].numpy(), color="green", linewidth=3)
 y_up = qhet_mean[:, 0].numpy() + 1.96 * np.sqrt(qhet_var[:, 0].numpy())
 y_lo = qhet_mean[:, 0].numpy() - 1.96 * np.sqrt(qhet_var[:, 0].numpy())
-ax[0,1].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="green")
-
-qhet_mean, qhet_var = qhet_model2.model_gpflux.predict_f(x)
-ax[1,1].plot(x.numpy(), qhet_mean[:, 0].numpy(), color="green", linewidth=3)
-y_up = qhet_mean[:, 0].numpy() + 1.96 * np.sqrt(qhet_var[:, 0].numpy())
-y_lo = qhet_mean[:, 0].numpy() - 1.96 * np.sqrt(qhet_var[:, 0].numpy())
-ax[1,1].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="green")
-
-# # hetGP plot
-# hetgp_mean, hetgp_var = hetgp.model_gpflux.predict_f(x)
-# lik_layer = hetgp.model_gpflux.likelihood_layer
-# dist = lik_layer.likelihood.conditional_distribution(hetgp_mean)
-# hetgp_qpred = dist.quantile(value=quantile_level)
-# ax[0, 2].plot(x.numpy(), hetgp_qpred[:, 0].numpy(), color="orange", linewidth=3)
-#
-# def quantile_traj_from_hetgp(model, at, qlevel):
-#     trajectory = model.sample_trajectory()
-#     lik_layer = model.model_gpflux.likelihood_layer
-#     dist = lik_layer.likelihood.conditional_distribution(trajectory(at))
-#     return dist.quantile(value=qlevel)
-#
-# for i in range(10):
-#     hetgp_traj = quantile_traj_from_hetgp(hetgp, x, quantile_level)
-#     ax[0,2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
-#     hetgp_traj = quantile_traj_from_hetgp(hetgp, x, 1. - quantile_level)
-#     ax[1, 2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
-
+ax[0,0].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="green")
 
 # homGP plot
 qhom_mean, qhom_var = qhom_model.model_gpflux.predict_f(x)
-ax[0,3].plot(x.numpy(), qhom_mean[:, 0].numpy(), color="blue", linewidth=3)
+ax[0,1].plot(x.numpy(), qhom_mean[:, 0].numpy(), color="blue", linewidth=3)
 y_up = qhom_mean[:, 0].numpy() + 1.96 * np.sqrt(qhom_var[:, 0].numpy())
 y_lo = qhom_mean[:, 0].numpy() - 1.96 * np.sqrt(qhom_var[:, 0].numpy())
-ax[0,3].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="blue")
-
-qhom_mean, qhom_var = qhom_model2.model_gpflux.predict_f(x)
-ax[1,3].plot(x.numpy(), qhom_mean[:, 0].numpy(), color="blue", linewidth=3)
-y_up = qhom_mean[:, 0].numpy() + 1.96 * np.sqrt(qhom_var[:, 0].numpy())
-y_lo = qhom_mean[:, 0].numpy() - 1.96 * np.sqrt(qhom_var[:, 0].numpy())
-ax[1,3].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="blue")
+ax[0,1].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="blue")
 
 for row in range(nrows):
     ax[row, 0].set_ylabel("y")
 
 for col in range(ncols):
-    ax[1, col].set_xlabel("x")
+    ax[0, col].set_xlabel("x")
 
 fig.tight_layout()
 
-ax[0, 0].set_title("Actual quantiles")
-ax[0, 1].set_title("Quantile hetGP")
-ax[0, 2].set_title("Gaussian hetGP")
-ax[0, 3].set_title("Gaussian homGP")
+# ax[0, 0].set_title("Actual quantiles")
+ax[0, 0].set_title("Quantile hetGP")
+ax[0, 1].set_title("Gaussian homGP")

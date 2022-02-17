@@ -69,6 +69,20 @@ def create_acquisition_rule(CONFIG):
 
             return trieste.acquisition.rule.EfficientGlobalOptimization(gibbon_acq.using(OBJECTIVE),
                                                                         num_query_points=CONFIG.batch_size)
+        elif CONFIG.rule == "GIBBON2":
+            search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
+            d = tf.shape(CONFIG.problem.lower_bounds)[0]
+
+            gibbon_acq = GIBBONForQuantile(
+                search_space,
+                quantile_level=CONFIG.problem.quantile_level,
+                num_samples=10,
+                grid_size=10_000 * d,
+                rescaled_repulsion=False
+            )
+
+            return trieste.acquisition.rule.EfficientGlobalOptimization(gibbon_acq.using(OBJECTIVE),
+                                                                        num_query_points=CONFIG.batch_size)
         else:
             raise NotImplementedError(f"Wrong rule, received {CONFIG.rule}")
 

@@ -18,7 +18,7 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_gld"
+    results_dir:str = "results_gld_quad"
     dimension: int = None
     rule:float = "TS"
 
@@ -55,7 +55,7 @@ def dict_product(dicts):
 
 def make_all_configs():
     initial_budget_per_dimension = [50]
-    seeds = np.arange(20)
+    seeds = np.arange(50)
     problems = ["gld"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
 
     budgets_per_dimension = [250]
@@ -63,7 +63,7 @@ def make_all_configs():
     # models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
     # dimensions = [2, 4, 6]
     # levels = [0.75, 0.9, 0.95]
-    models = ["quantile", "homquantile"]
+    models = ["quantile"]
     batch_sizes = [50]
     dimensions = [3, 6]
     levels = [0.75, 0.95]
