@@ -175,9 +175,9 @@ def get_problem(problem_specs: [str, int, int, float]):
     elif name == "gld":
 
         if input_dim == 6:
-            lengthscale=1.
+            lengthscale = 1.
         else:
-            lengthscale=0.5
+            lengthscale = 0.5
 
         fun, quantile_fun = create_gld_trajectory(input_dim=input_dim, lengthscale=lengthscale, seed=seed, tau=quantile_level)
 

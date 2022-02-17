@@ -130,7 +130,6 @@ def create_gld_trajectory(input_dim, lengthscale, seed, tau):
 
     fun = tf.function(lambda at: gld.sample(trajectory(at)[None, ...]) - 4. * tf.reduce_sum((at - 0.5) ** 2, axis=-1)[..., None])
     quantile_fun = tf.function(lambda at: gld.quantile(tau=tau, lambda_val=trajectory(at)[None, ...])[0, 0, ..., None] - 4. * tf.reduce_sum((at - 0.5) ** 2, axis=-1)[..., None])
-
     # fun = lambda at: gld.sample(trajectory(at)[None, ...])
     # quantile_fun = tf.function(lambda at: gld.quantile(tau=tau, lambda_val=trajectory(at)[None, ...])[0, 0, ..., None])
 
@@ -138,19 +137,24 @@ def create_gld_trajectory(input_dim, lengthscale, seed, tau):
 
 
 if __name__ == "__main__":
+    input_dim = 6
 
-    quantile_levels = np.linspace(0.1, .9, 2)
+    if input_dim == 2:
+        quantile_levels = np.linspace(0.1, .9, 2)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
 
-    for quantile_level in quantile_levels:
-        fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=2, tau=quantile_level)
+        for quantile_level in quantile_levels:
+            fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=12, tau=quantile_level)
 
-        # Create a regular grid on the parameter space
-        Xplot, xx, yy = create_grid(mins=[0., 0.], maxs=[1., 1.], grid_density=30)
-        qfun = quantile_fun(Xplot).numpy()
-        plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
+            # Create a regular grid on the parameter space
+            Xplot, xx, yy = create_grid(mins=[0., 0.], maxs=[1., 1.], grid_density=30)
+            qfun = quantile_fun(Xplot).numpy()
+            plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
+
+    else:
+        fun, quantile_fun = create_gld_trajectory(input_dim=6, lengthscale=1., seed=12, tau=0.9)
 
     nrow = 4
     ncol = 4
@@ -160,9 +164,11 @@ if __name__ == "__main__":
 
     for i in range(nrow):
         for j in range(ncol):
-            x = np.random.uniform(0., 1., 2).reshape(-1, 1)
-            xx = np.repeat(x, 10000).reshape(10000, 2)
+            x = np.random.uniform(0., 1., input_dim).reshape(1, -1)
+            xx = np.repeat(x, 10000, axis=0)  #.reshape(10000, input_dim)
             f = fun(xx).numpy()
             ax[i, j].hist(f, bins)
+            if input_dim == 6:
+                ax[i, j].axvline(quantile_fun(x).numpy())
 
 
