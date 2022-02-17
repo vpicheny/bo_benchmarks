@@ -66,7 +66,7 @@ quantile_levels = np.linspace(0.1, .9, 2)
 # ax = fig.add_subplot(111, projection='3d')
 
 from gld_problems import create_gld_trajectory
-from plotting import create_grid, plot_surface
+# from plotting import create_grid, plot_surface
 
 
 # for quantile_level in quantile_levels:
