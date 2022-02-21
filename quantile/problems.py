@@ -10,6 +10,8 @@ from trieste.space import Box
 
 from gld_problems import create_gld_trajectory
 import gym
+from trieste.utils import to_numpy
+
 
 N_RUNS = 1
 
@@ -210,10 +212,10 @@ def get_problem(problem_specs: [str, int, int, float]):
             problem.dim = 12
 
         def fun(x):
-            return lander_objective(x, env, steps_limit, timeout_reward, problem.dim)
+            return lander_objective(x, env, steps_limit, timeout_reward, problem.dim) / 300.
 
         def quantile_fun(x):
-            xx = np.repeat(x, 10000, axis=-2)
+            xx = np.repeat(x, 100, axis=-2)
             ff = fun(xx)
             return np.quantile(ff, q=quantile_level, axis=-2)
 
@@ -237,7 +239,7 @@ def lander_objective(x, env, steps_limit, timeout_reward, dim):
 
     # for each point compute average reward over n_runs runs
     all_rewards = []
-    for w in x.numpy():
+    for w in to_numpy(x):
         rewards = [demo_heuristic_lander(env, w, steps_limit, timeout_reward, heuristic_Controller) for _ in range(N_RUNS)]
         all_rewards.append(rewards)
 

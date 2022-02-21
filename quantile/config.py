@@ -55,8 +55,8 @@ def dict_product(dicts):
 
 def make_all_configs():
     initial_budget_per_dimension = [50]
-    seeds = np.arange(50)
-    problems = ["gld"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
+    seeds = np.arange(10)
+    problems = ["lunar_lander_6"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
 
     budgets_per_dimension = [250]
     num_features = [1000]
@@ -64,12 +64,12 @@ def make_all_configs():
     # models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
     # dimensions = [2, 4, 6]
     # levels = [0.75, 0.9, 0.95]
-    models = ["quantile"]
-    batch_sizes = [50]
-    dimensions = [3, 6]
-    levels = [0.75, 0.95]
+    models = ["quantile", "hetgp", "GPR"]
+    batch_sizes = [10]
+    dimensions = [6]
+    levels = [0.9]
 
-    rules = ["GIBBON"]
+    rules = ["MES", "TS", "GIBBON"]
 
     all_conditions = list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,

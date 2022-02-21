@@ -75,45 +75,74 @@ tf.random.set_seed(CONFIG.seed)
 
 show_model, show_fun = True, True
 
-if CONFIG.problem.dim is not 2:
+if CONFIG.problem.dim != 2:
     show_model = False
     show_fun = False
 
-
+print("Creating initial dataset")
 observer = make_observer(CONFIG)
 search_space = trieste.space.Box(CONFIG.problem.lower_bounds, CONFIG.problem.upper_bounds)
 initial_query_points = create_initial_query_points(search_space, CONFIG)
 data = observer(initial_query_points)
+
+print("Creating initial model")
 model = build_model(data, CONFIG, search_space)  #, tb=tb_callback)
 
-summary_writer = tf.summary.create_file_writer("logs/tensorboard/experiment4")
+summary_writer = tf.summary.create_file_writer("logs/tensorboard/experiment_ll")
 trieste.logging.set_tensorboard_writer(summary_writer)
 
-
+print("Setting initial AskTell")
 acquisition_rule = create_acquisition_rule(CONFIG)
 ask_tell = AskTellOptimizer(search_space, data, model, acquisition_rule)
 
 num_iterations = np.int((CONFIG.budget - data.observations.shape[0]) / CONFIG.batch_size)
 
 all_best_x = extract_current_best_quantile(ask_tell, CONFIG)
+
+print("Evaluating regret")
 all_best_y = CONFIG.problem.quantile_fun(all_best_x)
 mean, var = ask_tell._models[OBJECTIVE].predict(ask_tell._datasets[OBJECTIVE].query_points)
+
 all_estimated_best_y = tf.reduce_min(mean[:, 0])[None,]
-plot_results(ask_tell, all_best_x, all_best_y, all_estimated_best_y, config, show_model=show_model, show_regret=False, show_fun=show_fun)
+
+# plot_results(ask_tell, all_best_x, all_best_y, all_estimated_best_y, config, show_model=show_model, show_regret=False, show_fun=show_fun)
 
 for step in range(num_iterations):
+    print(f"step number {step}")
     trieste.logging.set_step_number(step)
     query_points = ask_tell.ask()
     new_data = observer(query_points)
     ask_tell.tell(new_data)
     current_best_x = extract_current_best_quantile(ask_tell, CONFIG)
+    current_best_y = CONFIG.problem.quantile_fun(current_best_x)
     all_best_x = tf.concat([all_best_x, current_best_x], axis=0)
-    all_best_y = CONFIG.problem.quantile_fun(all_best_x)
+    all_best_y = tf.concat([all_best_y, current_best_y], axis=0)
+    # all_best_y = CONFIG.problem.quantile_fun(all_best_x)
     mean, var = ask_tell._models[OBJECTIVE].predict(ask_tell._datasets[OBJECTIVE].query_points)
     estimated_best_y = tf.reduce_min(mean[:, 0])
     all_estimated_best_y = tf.concat([all_estimated_best_y, estimated_best_y[None,]], axis=0)
 
     # monitor models after each tell
+    if summary_writer:
+        models = ask_tell._models  # pylint: disable=protected-access
+        trieste.logging.set_step_number(step)
+        with summary_writer.as_default(step=step):
+            for tag, model in models.items():
+                with tf.name_scope(f"{tag}.model"):
+                    model.log()
+        with summary_writer.as_default(step=step):
+            with tf.name_scope("Query points"):
+                for j in range(query_points.shape[-1]):
+                    tf.summary.histogram(f"new_qp_x{j}", new_data.query_points[:, j])
+            tf.summary.histogram("new_data", new_data.observations)
+            with tf.name_scope("Current best"):
+                tf.summary.scalar("estimated best y", estimated_best_y)
+                tf.summary.scalar("current best y", current_best_y[0])
+                with tf.name_scope("Current best x"):
+                    for j in range(query_points.shape[-1]):
+                        tf.summary.scalar(f"current_best_x{j}", current_best_x[0, j])
+
+
     if summary_writer:
         with summary_writer.as_default():
             for tag, model in ask_tell._models.items():
@@ -124,7 +153,7 @@ for step in range(num_iterations):
                 tf.summary.histogram(f"new_qp_x{j}", new_data.query_points[:, j])
             tf.summary.histogram(f"new_data", new_data.observations)
 
-    plot_results(ask_tell, all_best_x, all_best_y, all_estimated_best_y, config, show_model=show_model, show_regret=False, show_fun=show_fun)
+    # plot_results(ask_tell, all_best_x, all_best_y, all_estimated_best_y, config, show_model=show_model, show_regret=False, show_fun=show_fun)
 
 # all_best_y = CONFIG.problem.quantile_fun(all_best_x)
 best_x = all_best_x
