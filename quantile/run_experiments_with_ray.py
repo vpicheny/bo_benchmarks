@@ -40,7 +40,7 @@ def run_single_experiment(config):
 
 if __name__ == "__main__":
 
-    num_workers = 32
+    num_workers = 10
 
     ray.init(num_cpus=num_workers)
 

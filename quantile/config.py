@@ -18,7 +18,7 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_quad"
+    results_dir:str = "results_ll"
     dimension: int = None
     rule:float = "TS"
 

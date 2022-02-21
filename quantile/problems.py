@@ -215,7 +215,7 @@ def get_problem(problem_specs: [str, int, int, float]):
             return lander_objective(x, env, steps_limit, timeout_reward, problem.dim) / 300.
 
         def quantile_fun(x):
-            xx = np.repeat(x, 100, axis=-2)
+            xx = np.repeat(x, 1000, axis=-2)
             ff = fun(xx)
             return np.quantile(ff, q=quantile_level, axis=-2)
 
