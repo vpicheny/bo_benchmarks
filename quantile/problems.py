@@ -2,10 +2,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import numpy as np
 from trieste.objectives import scaled_branin, hartmann_3, SCALED_BRANIN_MINIMUM
-from trieste.space import Box
 from scipy.stats import norm
 
-from trieste.acquisition.optimizer import automatic_optimizer_selector, generate_continuous_optimizer
+from trieste.acquisition.optimizer import generate_continuous_optimizer
 from trieste.acquisition import AcquisitionFunction
 from trieste.space import Box
 
@@ -191,12 +190,12 @@ def get_problem(problem_specs: [str, int, int, float]):
         problem.quantile_fun = quantile_fun
         problem.quantile_level = quantile_level
         problem.dim = input_dim
-        problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 100000)
+        problem.minimum = get_minimum(problem.quantile_fun, problem.lower_bounds, problem.upper_bounds, 100000, 10)
         return problem
+
 
     elif name in ("lunar_lander_6", "lunar_lander_8", "lunar_lander_12"):
 
-        import gym
         env_name = "LunarLander-v2"
         env = gym.make(env_name)
         steps_limit = 1000
@@ -225,12 +224,6 @@ def get_problem(problem_specs: [str, int, int, float]):
         problem.quantile_level = quantile_level
         problem.minimum = 0 # dummy value
         return problem
-
-
-def get_minimum(fun, lb, ub, num_samples):
-    points = Box(lb, ub).sample(num_samples)
-    y = fun(points)
-    return tf.reduce_min(y).numpy()
 
 
 def lander_objective(x, env, steps_limit, timeout_reward, dim):
@@ -353,3 +346,11 @@ def heuristic_Controller_12d(s, w):  # takes 12 dim w of config
     return a
 
 
+def get_minimum(fun, lb, ub, num_samples, num_batches=1):
+
+    print("finding minimum")
+    search_space = Box(lb, ub)
+    acquisition_function = DummyAcquisition(fun)
+    optimizer = generate_continuous_optimizer(num_initial_samples=5000, num_optimization_runs=50)
+    point = optimizer(search_space, acquisition_function)
+    return fun(point)
