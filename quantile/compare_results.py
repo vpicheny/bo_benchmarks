@@ -5,7 +5,7 @@ from glob import glob
 import os
 
 
-def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False):
+def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     lines = []
     for name, regret in regrets.items():
@@ -18,10 +18,11 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
             y_up = y_md + 2. * y_sd / regret.shape[-1] ** .5
 
         x = np.arange(y_md.shape[0])
-        lines += ax.plot(x, y_up, label=name)
-        # col = ax.get_lines()[-1].get_color()
+        lines += ax.plot(x, y_md, label=name)
+        col = ax.get_lines()[-1].get_color()
         # lines += ax.plot(x, y_up, label=name, linewidth=.5, color=col)
-        # ax.fill_between(x, y_up, y_lo, alpha=0.3, cmap=plt.cm.RdYlGn)
+        if CI:
+            ax.fill_between(x, y_up, y_lo, alpha=0.3, cmap=plt.cm.RdYlGn)
 
         ax.set_yscale('log')
         if show_all:
@@ -34,7 +35,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     return fig
 
 
-dir = "results_gld_quad_nohom"
+dir = "results_small_batch"
 pb_tags = {"gld_dim_3_q_0.95", "gld_dim_3_q_0.75", "gld_dim_6_q_0.95", "gld_dim_6_q_0.75"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
 # pb_tags = {"gld_dim_2_q_0.75"}
 
@@ -59,4 +60,4 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True)
+    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=False)
