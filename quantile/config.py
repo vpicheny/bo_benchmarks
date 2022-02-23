@@ -56,7 +56,7 @@ def dict_product(dicts):
 def make_all_configs():
     initial_budget_per_dimension = [50]
     seeds = np.arange(10)
-    problems = ["lunar_lander_6"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
+    problems = ["fel_skew_6"]  #, "flat_branin_noise", "gauss_noise_branin", "exp_noise_branin", 'hartmann_3']  # ["gauss_noise_branin", "exp_noise_branin"]  # ['hartmann_3']  #["gauss_noise_branin", "exp_noise_branin"]
 
     budgets_per_dimension = [250]
     num_features = [1000]
@@ -67,7 +67,7 @@ def make_all_configs():
     models = ["quantile", "hetgp", "GPR"]
     batch_sizes = [10]
     dimensions = [6]
-    levels = [0.9]
+    levels = [0.7]
 
     rules = ["MES", "TS", "GIBBON"]
 

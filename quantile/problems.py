@@ -11,7 +11,7 @@ from trieste.space import Box
 from gld_problems import create_gld_trajectory
 import gym
 from trieste.utils import to_numpy
-
+from scipy import stats
 
 N_RUNS = 1
 
@@ -202,7 +202,6 @@ def get_problem(problem_specs: [str, int, int, float]):
         env = gym.make(env_name)
         steps_limit = 1000
         timeout_reward = -100
-        quantile_level = 0.9
 
         if name == "lunar_lander_6":
             problem.dim = 6
@@ -226,6 +225,42 @@ def get_problem(problem_specs: [str, int, int, float]):
         problem.quantile_level = quantile_level
         problem.minimum = 0 # dummy value
         return problem
+
+
+    elif name == "fel_skew_6":
+        
+        loaded_mean_model = tf.saved_model.load("FEL_SKEW_6_mean_model")
+        loaded_ae_model = tf.saved_model.load("FEL_SKEW_6_ae_model")
+        loaded_loce_model = tf.saved_model.load("FEL_SKEW_6_loce_model")
+        loaded_scalee_model = tf.saved_model.load("FEL_SKEW_6_scalee_model")
+
+        def fun(x):
+            y = loaded_mean_model.predict_f_compiled(x)[0]
+            ae = loaded_ae_model.predict_f_compiled(x)[0]
+            loce = loaded_loce_model.predict_f_compiled(x)[0]
+            scalee = loaded_scalee_model.predict_f_compiled(x)[0]
+            noise = stats.skewnorm(ae, loce, scalee).rvs((len(x),1))
+            return -1.0 * (y + noise)
+
+        def quantile_fun(x):
+            y = loaded_mean_model.predict_f_compiled(x)[0]
+            ae = loaded_ae_model.predict_f_compiled(x)[0]
+            loce = loaded_loce_model.predict_f_compiled(x)[0]
+            scalee = loaded_scalee_model.predict_f_compiled(x)[0]
+            noise_samples = stats.skewnorm(ae, loce, scalee).rvs((len(x),10_000))
+            empirical_quantile = np.quantile(noise_samples,quantile_level,-1).reshape(-1,1)
+            return -1.0*(y + tf.constant(empirical_quantile,dtype=tf.float64))
+
+        problem.lower_bounds = [0.] * 6
+        problem.upper_bounds = [1.] * 6
+        problem.fun = fun
+        problem.quantile_fun = quantile_fun
+        problem.quantile_level = quantile_level
+        problem.dim = input_dim
+        problem.minimum = tf.constant([[-6]],dtype=tf.float64)# this is not right
+        return problem
+
+
 
 
 def lander_objective(x, env, steps_limit, timeout_reward, dim):
