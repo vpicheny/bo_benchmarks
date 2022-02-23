@@ -20,7 +20,7 @@ from gpflux.models import DeepGP
 from gpflux.models.deep_gp import sample_dgp
 from gpflux.sampling.kernel_with_feature_decomposition import KernelWithFeatureDecomposition
 from gpflux.sampling.sample import efficient_sample, Sample
-#from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
+from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
 from gpflux.layers.basis_functions import RandomFourierFeatures as RandomFourierFeaturesCosine
 from gpflux.helpers import construct_basic_inducing_variables
 
@@ -28,7 +28,7 @@ from trieste.data import Dataset
 from trieste.models.gpflux.models import DeepGaussianProcess
 from trieste.types import TensorType
 from trieste.models.gpflow import VariationalGaussianProcess
-from trieste.models.optimizer import Optimizer, BatchOptimizer
+from trieste.models.optimizer import Optimizer, BatchOptimizer, KerasOptimizer
 
 from trieste.logging import get_step_number, get_tensorboard_writer
 
@@ -451,7 +451,7 @@ def build_hetgp_rff_model(data, num_features, likelihood_distribution, num_induc
         "callbacks": callbacks,
     }
     # optimizer = Optimizer(tf.optimizers.Adam(0.01), fit_args)
-    optimizer = BatchOptimizer(tf.optimizers.Adam(0.01), fit_args)
+    optimizer = KerasOptimizer(tf.optimizers.Adam(0.01), fit_args)
 
     return FeaturedHetGPFluxModel(model=model, optimizer=optimizer, #fit_args=fit_args,
                                   inducing_point_selector=inducing_point_selector)
