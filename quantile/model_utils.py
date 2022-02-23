@@ -20,8 +20,8 @@ from gpflux.models import DeepGP
 from gpflux.models.deep_gp import sample_dgp
 from gpflux.sampling.kernel_with_feature_decomposition import KernelWithFeatureDecomposition
 from gpflux.sampling.sample import efficient_sample, Sample
-from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
-# from gpflux.layers.basis_functions import RandomFourierFeatures as RandomFourierFeaturesCosine
+#from gpflux.layers.basis_functions.fourier_features import RandomFourierFeaturesCosine
+from gpflux.layers.basis_functions import RandomFourierFeatures as RandomFourierFeaturesCosine
 from gpflux.helpers import construct_basic_inducing_variables
 
 from trieste.data import Dataset
