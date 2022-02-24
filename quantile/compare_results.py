@@ -60,5 +60,5 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=True, quantiles=True, CI=False)
+    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=False)
     fig.savefig(tag+"regret.png")
