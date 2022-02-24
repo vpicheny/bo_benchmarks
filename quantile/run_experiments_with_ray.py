@@ -44,7 +44,7 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
-    num_workers = 30
+    num_workers = 10
 
     ray.init(num_cpus=num_workers)
 
