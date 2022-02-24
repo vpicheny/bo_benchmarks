@@ -36,7 +36,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
 
 
 dir = "results_ll"
-pb_tags = {"fel_skew_6_dim_6_q_0.7"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
+pb_tags = {"fel_skew_6_dim_6_q_0.7","fel_skew_16_dim_16_q_0.7"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
 # pb_tags = {"gld_dim_2_q_0.75"}
 
 for tag in pb_tags:
