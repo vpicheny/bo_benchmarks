@@ -6,7 +6,7 @@ import os
 
 
 def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(4, 5))
     lines = []
     for name, regret in regrets.items():
         if quantiles:
@@ -14,8 +14,8 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
         else:
             y_md = np.mean(regret, axis=0)
             y_sd = np.std(regret, axis=0)
-            y_lo = y_md - 2. * y_sd / regret.shape[-1] ** .5
-            y_up = y_md + 2. * y_sd / regret.shape[-1] ** .5
+            y_lo = y_md - 2. * y_sd / regret.shape[-2] ** .5
+            y_up = y_md + 2. * y_sd / regret.shape[-2] ** .5
 
         x = np.arange(y_md.shape[0])
         lines += ax.plot(x, y_md, label=name)
@@ -28,15 +28,15 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
         if show_all:
             col = ax.get_lines()[-1].get_color()
             ax.plot(x[:, None], regret.T, linewidth=.5, color=col)
-    ax.legend(handles=lines, loc='lower left')
-    ax.set_title(title)
+    # ax.legend(handles=lines, loc='lower left')
+    ax.set_title(title[4:] + "_batch_10")
     ax.set_xlabel("# of evaluations")
     ax.set_ylabel(ylabel)
     return fig
 
 
 dir = "results_small_batch"
-pb_tags = {"gld_dim_3_q_0.95", "gld_dim_3_q_0.75", "gld_dim_6_q_0.95", "gld_dim_6_q_0.75"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
+pb_tags = {"gld_dim_3_q_0.75", "gld_dim_3_q_0.95", "gld_dim_6_q_0.75", "gld_dim_6_q_0.95"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
 # pb_tags = {"gld_dim_2_q_0.75"}
 
 for tag in pb_tags:
@@ -60,4 +60,20 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=False)
+    # all_regrets["TS"] = all_regrets.pop("quantile_rule_TS_init_50_budget_250_batch_50")
+    # all_regrets["MES"] = all_regrets.pop("quantile_rule_MES_init_50_budget_250_batch_50")
+    # all_regrets["Q-GIBBON"] = all_regrets.pop("quantile_rule_GIBBON_init_50_budget_250_batch_50")
+    # all_regrets["GPR-EI"] = all_regrets.pop("GPR_rule_TS_init_50_budget_250_batch_50")
+    # all_regrets["hetGP"] = all_regrets.pop("hetgp_rule_TS_init_50_budget_250_batch_50")
+    all_regrets["TS"] = all_regrets.pop("quantile_rule_TS_init_50_budget_250_batch_10")
+    all_regrets["MES"] = all_regrets.pop("quantile_rule_MES_init_50_budget_250_batch_10")
+    all_regrets["GIBBON"] = all_regrets.pop("quantile_rule_GIBBON_init_50_budget_250_batch_10")
+    all_regrets["GPR-EI"] = all_regrets.pop("GPR_rule_TS_init_50_budget_250_batch_10")
+    all_regrets["hetGP"] = all_regrets.pop("hetgp_rule_TS_init_50_budget_250_batch_10")
+
+    all_regrets.pop("hetGP")
+    all_regrets.pop("MES")
+    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=False, CI=True)
+
+
+

@@ -88,7 +88,7 @@ data = observer(initial_query_points)
 print("Creating initial model")
 model = build_model(data, CONFIG, search_space)  #, tb=tb_callback)
 
-summary_writer = tf.summary.create_file_writer("logs/tensorboard/experiment_ll")
+summary_writer = tf.summary.create_file_writer("logs/tensorboard/experiment_ll2")
 trieste.logging.set_tensorboard_writer(summary_writer)
 
 print("Setting initial AskTell")
@@ -111,8 +111,12 @@ for step in range(num_iterations):
     print(f"step number {step}")
     trieste.logging.set_step_number(step)
     query_points = ask_tell.ask()
+
+    print("Querying new data")
     new_data = observer(query_points)
     ask_tell.tell(new_data)
+
+    print("Logging")
     current_best_x = extract_current_best_quantile(ask_tell, CONFIG)
     current_best_y = CONFIG.problem.quantile_fun(current_best_x)
     all_best_x = tf.concat([all_best_x, current_best_x], axis=0)

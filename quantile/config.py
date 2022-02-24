@@ -18,7 +18,7 @@ class CONFIG:
     num_features:int = 1000
     dirName:str = None
     num_initial_points: int = None
-    results_dir:str = "results_ll"
+    results_dir:str = "results_ll2"
     dimension: int = None
     rule:float = "TS"
 
@@ -64,12 +64,12 @@ def make_all_configs():
     # models = ["hetgp", "quantile", "GPR", "homquantile"]  #, "hetgp", "GPR"]  #, "quantile", "GPR"]  # ["quantile"]  #["hetgp", 'GPR']  #
     # dimensions = [2, 4, 6]
     # levels = [0.75, 0.9, 0.95]
-    models = ["quantile", "hetgp", "GPR"]
-    batch_sizes = [10]
+    models = ["homquantile", "quantile"]
+    batch_sizes = [25]
     dimensions = [6]
     levels = [0.9]
 
-    rules = ["MES", "TS", "GIBBON"]
+    rules = ["GIBBON"]
 
     all_conditions = list(dict_product(dict(initial_budget_per_dimension=initial_budget_per_dimension,
                                   seed=seeds,

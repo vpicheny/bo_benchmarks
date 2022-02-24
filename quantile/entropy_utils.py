@@ -11,7 +11,8 @@ from trieste.space import SearchSpace
 from trieste.acquisition.function.entropy import GIBBONModelType, SupportsCovarianceObservationNoise
 from trieste.acquisition.rule import OBJECTIVE, EfficientGlobalOptimization
 from trieste.acquisition.interface import SingleModelGreedyAcquisitionBuilder, AcquisitionFunction,  PenalizationFunction
-from trieste.acquisition.function import ExpectedImprovement, MinValueEntropySearch, min_value_entropy_search, LocalPenalization, GIBBON, gibbon_repulsion_term, gibbon_quality_term
+from trieste.acquisition.function import ExpectedImprovement, MinValueEntropySearch, min_value_entropy_search, \
+    LocalPenalization, GIBBON, gibbon_repulsion_term, gibbon_quality_term
 from trieste.acquisition.sampler import GumbelSampler
 from trieste.types import TensorType
 from typing import Optional, cast

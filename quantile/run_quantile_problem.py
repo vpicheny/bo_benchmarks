@@ -7,6 +7,7 @@ from acquisition_utils import create_initial_query_points, create_acquisition_ru
 from trieste.data import Dataset
 from config import make_all_configs, make_config
 
+
 def make_observer(CONFIG):
     if CONFIG.model == "GPR":
         def obs(qp):
@@ -45,7 +46,8 @@ def run_quantile_experiment(CONFIG):
             [all_best_x, tf.repeat(current_best_x, new_data.observations.shape[0], axis=0)], 0,
         )
 
-    all_best_y = CONFIG.problem.quantile_fun(all_best_x)
+    # all_best_y = CONFIG.problem.quantile_fun(all_best_x)
+    all_best_y = None
     return ask_tell, all_best_x, all_best_y
 
 

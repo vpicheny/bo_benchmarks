@@ -13,7 +13,7 @@ import gym
 from trieste.utils import to_numpy
 
 
-N_RUNS = 1
+N_RUNS = 10
 
 
 class Problem:
@@ -215,9 +215,11 @@ def get_problem(problem_specs: [str, int, int, float]):
             return lander_objective(x, env, steps_limit, timeout_reward, problem.dim) / 300.
 
         def quantile_fun(x):
-            xx = np.repeat(x, 1000, axis=-2)
-            ff = fun(xx)
-            return np.quantile(ff, q=quantile_level, axis=-2)
+            # xx = np.repeat(x, 100, axis=-2)
+            ff = np.zeros([100, 1])
+            for i in range(100):
+                ff[i, :] = fun(x)
+            return np.quantile(ff, q=quantile_level, axis=0)
 
         problem.lower_bounds = [0.] * problem.dim
         problem.upper_bounds = [1.2] * problem.dim

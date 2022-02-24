@@ -30,8 +30,8 @@ def run_single_experiment(config):
         np.save(f"{config.dirName}/{experiment_name}_X", X)
         np.save(f"{config.dirName}/{experiment_name}_Y", Y)
         np.save(f"{config.dirName}/{experiment_name}_best_x", best_x)
-        np.save(f"{config.dirName}/{experiment_name}_best_y", best_y)
-        np.save(f"{config.dirName}/{experiment_name}_regret", best_y - config.problem.minimum)
+        # np.save(f"{config.dirName}/{experiment_name}_best_y", best_y)
+        # np.save(f"{config.dirName}/{experiment_name}_regret", best_y - config.problem.minimum)
 
         print(f"finished experiment {experiment_name}")
     else:
@@ -40,7 +40,7 @@ def run_single_experiment(config):
 
 if __name__ == "__main__":
 
-    num_workers = 10
+    num_workers = 4
 
     ray.init(num_cpus=num_workers)
 

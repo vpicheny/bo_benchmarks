@@ -57,11 +57,11 @@ class GLD(ABC):
         if tau.get_shape().ndims == 1:
             tau = tau[:, None, None]
 
-        lambda0 = lambda_val[None, :, :, 0] * 2.
-        lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 4.) / 2.
-        # lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 1.) / 3.
-        lambda2 = lambda_val[None, :, :, 2] * .2
-        lambda3 = lambda_val[None, :, :, 3] * .2
+        lambda0 = lambda_val[None, :, :, 0] * 1.
+        # lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 4.) / 2.
+        lambda1 = self.softplus_function(lambda_val[None, :, :, 1] * 1.) / 3.
+        lambda2 = lambda_val[None, :, :, 2] * 1.
+        lambda3 = lambda_val[None, :, :, 3] * 1.
 
         # Special cases when lambda2 and lambda3 are zero
         l2_zeros_grid = tf.equal(tf.ones_like(tau) * lambda2, 0.)
@@ -137,7 +137,7 @@ def create_gld_trajectory(input_dim, lengthscale, seed, tau):
 
 
 if __name__ == "__main__":
-    input_dim = 6
+    input_dim = 3
 
     if input_dim == 2:
         quantile_levels = np.linspace(0.1, .9, 2)
@@ -154,13 +154,13 @@ if __name__ == "__main__":
             plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
 
     else:
-        fun, quantile_fun = create_gld_trajectory(input_dim=6, lengthscale=1., seed=12, tau=0.9)
+        fun, quantile_fun = create_gld_trajectory(input_dim=input_dim, lengthscale=.2, seed=163233, tau=0.9)
 
-    nrow = 4
-    ncol = 4
-    fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all", sharey="all")
+    nrow = 1
+    ncol = 3
+    fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all")
 
-    bins = np.linspace(-6., 6., 20)
+    bins = np.linspace(-7., 7., 50)
 
     for i in range(nrow):
         for j in range(ncol):
@@ -168,7 +168,8 @@ if __name__ == "__main__":
             xx = np.repeat(x, 10000, axis=0)  #.reshape(10000, input_dim)
             f = fun(xx).numpy()
             ax[i, j].hist(f, bins)
-            if input_dim == 6:
-                ax[i, j].axvline(quantile_fun(x).numpy())
+            # if input_dim == 6:
+            ax[i, j].axvline(quantile_fun(x).numpy(), color="red")
+            ax[i, j].yaxis.set_visible(False)
 
 
