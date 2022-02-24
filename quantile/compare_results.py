@@ -9,6 +9,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     fig, ax = plt.subplots(figsize=(8, 8))
     lines = []
     for name, regret in regrets.items():
+        regret = ((regret- 6.0))*tf.math.sqrt(0.39944017504869506) + 3.346943095486961
         if quantiles:
             y_lo, y_md, y_up = np.nanpercentile(regret, q=[10, 50, 90], axis=0)
         else:
@@ -60,5 +61,5 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=False)
+    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=True)
     fig.savefig(tag+"regret.png")
