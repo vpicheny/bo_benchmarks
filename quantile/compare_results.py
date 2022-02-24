@@ -9,7 +9,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     fig, ax = plt.subplots(figsize=(8, 8))
     lines = []
     for name, regret in regrets.items():
-        regret = ((regret- 6.0))*tf.math.sqrt(0.39944017504869506) + 3.346943095486961
+        regret = (-1.0*(regret- 6.0))*tf.math.sqrt(0.39944017504869506) + 3.346943095486961
         if quantiles:
             y_lo, y_md, y_up = np.nanpercentile(regret, q=[10, 50, 90], axis=0)
         else:
