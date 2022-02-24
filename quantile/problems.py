@@ -260,7 +260,7 @@ def get_problem(problem_specs: [str, int, int, float]):
         problem.minimum = tf.constant([[-6]],dtype=tf.float64)# this is not right
         return problem
 
-    elif name == "fel_skew_16":
+    elif name == "fel_skew_16_small":
         
         loaded_mean_model = tf.saved_model.load("FEL_SKEW_16_mean_model")
         loaded_ae_model = tf.saved_model.load("FEL_SKEW_16_ae_model")
