@@ -5,6 +5,11 @@ from glob import glob
 import os
 import tensorflow as tf
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+
+
 def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     lines = []
