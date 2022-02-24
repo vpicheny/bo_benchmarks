@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from glob import glob
 import os
-
+import tensorflow as tf
 
 def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
     fig, ax = plt.subplots(figsize=(8, 8))
