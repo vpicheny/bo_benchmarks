@@ -260,7 +260,38 @@ def get_problem(problem_specs: [str, int, int, float]):
         problem.minimum = tf.constant([[-6]],dtype=tf.float64)# this is not right
         return problem
 
+    elif name == "fel_skew_16":
+        
+        loaded_mean_model = tf.saved_model.load("FEL_SKEW_16_mean_model")
+        loaded_ae_model = tf.saved_model.load("FEL_SKEW_16_ae_model")
+        loaded_loce_model = tf.saved_model.load("FEL_SKEW_16_loce_model")
+        loaded_scalee_model = tf.saved_model.load("FEL_SKEW_16_scalee_model")
 
+        def fun(x):
+            y = loaded_mean_model.predict_f_compiled(x)[0]
+            ae = loaded_ae_model.predict_f_compiled(x)[0]
+            loce = loaded_loce_model.predict_f_compiled(x)[0]
+            scalee = loaded_scalee_model.predict_f_compiled(x)[0]
+            noise = stats.skewnorm(ae, loce, scalee).rvs((len(x),1))
+            return -1.0 * (y + noise)
+
+        def quantile_fun(x):
+            y = loaded_mean_model.predict_f_compiled(x)[0]
+            ae = loaded_ae_model.predict_f_compiled(x)[0]
+            loce = loaded_loce_model.predict_f_compiled(x)[0]
+            scalee = loaded_scalee_model.predict_f_compiled(x)[0]
+            noise_samples = stats.skewnorm(ae, loce, scalee).rvs((len(x),10_000))
+            empirical_quantile = np.quantile(noise_samples,quantile_level,-1).reshape(-1,1)
+            return -1.0*(y + tf.constant(empirical_quantile,dtype=tf.float64))
+
+        problem.lower_bounds = [0.] * 16
+        problem.upper_bounds = [1.] * 16
+        problem.fun = fun
+        problem.quantile_fun = quantile_fun
+        problem.quantile_level = quantile_level
+        problem.dim = 16
+        problem.minimum = tf.constant([[-6]],dtype=tf.float64)# this is not right
+        return problem
 
 
 def lander_objective(x, env, steps_limit, timeout_reward, dim):
