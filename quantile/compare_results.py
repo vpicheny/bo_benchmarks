@@ -11,7 +11,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(12, 6))
     lines = []
     for name, regret in regrets.items():
         regret = (-1.0*(regret- 6.0))*tf.math.sqrt(0.39944017504869506) + 3.346943095486961
@@ -35,7 +35,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
             col = ax.get_lines()[-1].get_color()
             ax.plot(x[:, None], regret.T, linewidth=.5, color=col)
     ax.legend(handles=lines, loc='lower left')
-    ax.set_title(title)
+    #ax.set_title(title)
     ax.set_xlabel("# of evaluations")
     ax.set_ylabel(ylabel)
     return fig
