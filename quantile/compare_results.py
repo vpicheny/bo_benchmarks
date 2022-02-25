@@ -15,7 +15,8 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     #plt.rcParams.update({'font.size': 18,'axes.titlesize':18,'axes.labelsize':15})
 
     lines = []
-    for name, regret in regrets.items():
+    for name in ["TS","Q-GIBBON","GPR-EI"]:
+        regret = regrets[name]
         if name=="TS":
             col = '#1f77b4'
         elif name=="Q-GIBBON":
