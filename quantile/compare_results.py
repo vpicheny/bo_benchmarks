@@ -30,7 +30,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
         if CI:
             ax.fill_between(x, y_up, y_lo, alpha=0.3, cmap=plt.cm.RdYlGn)
 
-        ax.set_yscale('log')
+        #ax.set_yscale('log')
         if show_all:
             col = ax.get_lines()[-1].get_color()
             ax.plot(x[:, None], regret.T, linewidth=.5, color=col)
@@ -41,8 +41,8 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     return fig
 
 
-dir = "results_ll"
-pb_tags = {"fel_skew_6_dim_6_q_0.7","fel_skew_16_dim_16_q_0.7","fel_skew_16_small_dim_16_q_0.7"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
+dir = "results_ll_old"
+pb_tags = {"fel_skew_16_dim_16_q_0.7"}  #, "exp_noise_branin", "hartmann_3", "flat_branin_noise"}
 # pb_tags = {"gld_dim_2_q_0.75"}
 
 for tag in pb_tags:
@@ -66,5 +66,5 @@ for tag in pb_tags:
                 regret = np.hstack([regret, reg])
             all_regrets[exp_name] = regret.T
 
-    fig = plot_regret(all_regrets, title=tag, ylabel="Simple regret", show_all=False, quantiles=True, CI=True)
+    fig = plot_regret(all_regrets, title=tag, ylabel="Quantile of X-ray pulse energy (mj)", show_all=False, quantiles=True, CI=True)
     fig.savefig(tag+"regret.png")
