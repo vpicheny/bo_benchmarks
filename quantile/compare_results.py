@@ -12,6 +12,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret", show_all=False, quantiles=False, CI=False):
     fig, ax = plt.subplots(figsize=(12, 6))
+    plt.rcParams.update({'font.size': 22})
+
     lines = []
     for name, regret in regrets.items():
         if name=="TS":
