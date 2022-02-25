@@ -14,6 +14,14 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
     fig, ax = plt.subplots(figsize=(12, 6))
     lines = []
     for name, regret in regrets.items():
+        if name=="TS":
+            col = '#1f77b4'
+        elif name=="Q-GIBBON":
+            col = "#ff7f0e"
+        elif name=="GPR-EI":
+            col = "#2ca02c"
+
+
         regret = (-1.0*(regret- 6.0))*tf.math.sqrt(0.39944017504869506) + 3.346943095486961
         if quantiles:
             y_lo, y_md, y_up = np.nanpercentile(regret, q=[10, 50, 90], axis=0)
@@ -24,8 +32,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
             y_up = y_md + 2. * y_sd / regret.shape[-1] ** .5
 
         x = np.arange(y_md.shape[0])
-        lines += ax.plot(x, y_md, label=name)
-        col = ax.get_lines()[-1].get_color()
+        lines += ax.plot(x, y_md, label=name, color = col)
         # lines += ax.plot(x, y_up, label=name, linewidth=.5, color=col)
         if CI:
             ax.fill_between(x, y_up, y_lo, alpha=0.3, cmap=plt.cm.RdYlGn)
