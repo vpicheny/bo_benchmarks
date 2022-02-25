@@ -35,7 +35,7 @@ def plot_regret(regrets: Dict[str, np.ndarray], title: str=None, ylabel="Regret"
         lines += ax.plot(x, y_md, label=name, color = col)
         # lines += ax.plot(x, y_up, label=name, linewidth=.5, color=col)
         if CI:
-            ax.fill_between(x, y_up, y_lo, alpha=0.3, cmap=plt.cm.RdYlGn)
+            ax.fill_between(x, y_up, y_lo, alpha=0.3, color=col)
 
         #ax.set_yscale('log')
         if show_all:
