@@ -13,52 +13,87 @@ tf.random.set_seed(1789)
 
 quantile_level = 0.9
 
-def noisefree_fun(x):
-    return .05 *tf.sin(x * np.pi * 2.) + .05 * x
+# def noisefree_fun(x):
+#     return .05 *tf.sin(x * np.pi * 2.) + .05 * x
+#
+# def fun(x):
+#     x = 1.3 * x
+#     # eps_left = tf.random.uniform(x.shape, -.5, .5, dtype=tf.float64)
+#
+#     eps_center = tfp.distributions.LogNormal(tf.cast(0., dtype=tf.float64),
+#                                              tf.cast(1., dtype=tf.float64)).sample(x.shape)
+#
+#     eps_right = tf.random.normal(x.shape, 0., 1., dtype=tf.float64)
+#
+#     # eps_left = 3. * eps_left * tf.maximum(0.2 - x, 0)
+#
+#     soft_left = 1. - tfp.distributions.Normal(tf.cast(0.3, dtype=tf.float64),
+#                                          tf.cast(.1, dtype=tf.float64)).cdf(x)
+#
+#     soft_right = tfp.distributions.Normal(tf.cast(1.1, dtype=tf.float64),
+#                                           tf.cast(.1, dtype=tf.float64)).cdf(x)
+#
+#     eps_center = .1 * eps_center * soft_left  # norm.pdf(x - 0.7, 0, 0.08)
+#     eps_right = .2 * eps_right * soft_right  # tf.maximum(0, x - .8) ** 2
+#
+#     return noisefree_fun(x) + eps_center + eps_right
+#
+# def quantile_fun(x, quantile_level):
+#     x = 1.3 * x
+#     # q_left = tfp.distributions.Uniform(tf.cast(-.5, dtype=tf.float64),
+#     #                                          tf.cast(.5, dtype=tf.float64)).quantile(quantile_level)
+#     q_center = tfp.distributions.LogNormal(tf.cast(0., dtype=tf.float64),
+#                                              tf.cast(1., dtype=tf.float64)).quantile(quantile_level)
+#     q_right = tfp.distributions.Normal(tf.cast(0., dtype=tf.float64),
+#                                              tf.cast(1., dtype=tf.float64)).quantile(quantile_level)
+#
+#     soft_left = 1. - tfp.distributions.Normal(tf.cast(0.3, dtype=tf.float64),
+#                                              tf.cast(.1, dtype=tf.float64)).cdf(x)
+#
+#     soft_right = tfp.distributions.Normal(tf.cast(1.1, dtype=tf.float64),
+#                                              tf.cast(.1, dtype=tf.float64)).cdf(x)
+#
+#     # q_left = 3. * q_left * tf.maximum(0.2 - x, 0)
+#     q_center = .1 * q_center * soft_left  #norm.pdf(x - 0.7, 0, 0.08)
+#     q_right = .2 * q_right * soft_right  #tf.maximum(0, x - .8) ** 2
+#
+#     return noisefree_fun(x) + q_center + q_right
 
-def fun(x):
-    x = 1.3 * x
-    # eps_left = tf.random.uniform(x.shape, -.5, .5, dtype=tf.float64)
 
-    eps_center = tfp.distributions.LogNormal(tf.cast(0., dtype=tf.float64),
-                                             tf.cast(1., dtype=tf.float64)).sample(x.shape)
+quantile_levels = np.linspace(0.1, .9, 2)
 
-    eps_right = tf.random.normal(x.shape, 0., 1., dtype=tf.float64)
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
 
-    # eps_left = 3. * eps_left * tf.maximum(0.2 - x, 0)
+from gld_problems import create_gld_trajectory
+from plotting import create_grid, plot_surface
 
-    soft_left = 1. - tfp.distributions.Normal(tf.cast(0.3, dtype=tf.float64),
-                                         tf.cast(.1, dtype=tf.float64)).cdf(x)
 
-    soft_right = tfp.distributions.Normal(tf.cast(1.1, dtype=tf.float64),
-                                          tf.cast(.1, dtype=tf.float64)).cdf(x)
+# for quantile_level in quantile_levels:
+#     fun, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
+    #
+    # # Create a regular grid on the parameter space
+    # Xplot, xx, yy = create_grid(mins=[0., 0.], maxs=[1., 1.], grid_density=30)
+    # qfun = quantile_fun(Xplot).numpy()
+    # plot_surface(xx, yy, qfun, ax=ax, contour=False, fill=False, alpha=0.5)
 
-    eps_center = .1 * eps_center * soft_left  # norm.pdf(x - 0.7, 0, 0.08)
-    eps_right = .2 * eps_right * soft_right  # tf.maximum(0, x - .8) ** 2
+seed = 12345
 
-    return noisefree_fun(x) + eps_center + eps_right
+fun, _ = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
 
-def quantile_fun(x, quantile_level):
-    x = 1.3 * x
-    # q_left = tfp.distributions.Uniform(tf.cast(-.5, dtype=tf.float64),
-    #                                          tf.cast(.5, dtype=tf.float64)).quantile(quantile_level)
-    q_center = tfp.distributions.LogNormal(tf.cast(0., dtype=tf.float64),
-                                             tf.cast(1., dtype=tf.float64)).quantile(quantile_level)
-    q_right = tfp.distributions.Normal(tf.cast(0., dtype=tf.float64),
-                                             tf.cast(1., dtype=tf.float64)).quantile(quantile_level)
+nrow = 4
+ncol = 4
+fig, ax = plt.subplots(nrow, ncol, squeeze=False, sharex="all", sharey="all")
 
-    soft_left = 1. - tfp.distributions.Normal(tf.cast(0.3, dtype=tf.float64),
-                                             tf.cast(.1, dtype=tf.float64)).cdf(x)
+bins = np.linspace(-6., 6., 20)
 
-    soft_right = tfp.distributions.Normal(tf.cast(1.1, dtype=tf.float64),
-                                             tf.cast(.1, dtype=tf.float64)).cdf(x)
-
-    # q_left = 3. * q_left * tf.maximum(0.2 - x, 0)
-    q_center = .1 * q_center * soft_left  #norm.pdf(x - 0.7, 0, 0.08)
-    q_right = .2 * q_right * soft_right  #tf.maximum(0, x - .8) ** 2
-
-    return noisefree_fun(x) + q_center + q_right
-
+dim = 1
+for i in range(nrow):
+    for j in range(ncol):
+        x = np.random.uniform(0., 1., dim).reshape(-1, 1)
+        xx = np.repeat(x, 10000).reshape(10000, dim)
+        f = fun(xx).numpy()
+        ax[i, j].hist(f, bins)
 
 # Set up problem
 observer = lambda qp: Dataset(qp, fun(qp))
@@ -84,13 +119,13 @@ qhet_model2 = build_hetgp_rff_model(data=data,
                                      inducing_point_selector=GridSampler(search_space))
 qhet_model2.optimize(data)
 
-# Fit hetGP model
-hetgp = build_hetgp_rff_model(data=data,
-                              num_features=1000,
-                              likelihood_distribution=tfp.distributions.Normal,
-                              num_inducing_points=40,
-                              inducing_point_selector=GridSampler(search_space))
-hetgp.optimize(data)
+# # Fit hetGP model
+# hetgp = build_hetgp_rff_model(data=data,
+#                               num_features=1000,
+#                               likelihood_distribution=tfp.distributions.Normal,
+#                               num_inducing_points=40,
+#                               inducing_point_selector=GridSampler(search_space))
+# hetgp.optimize(data)
 
 # Fit homogeneous quantile model
 qhom_model = build_hetgp_rff_model(data=data,
@@ -121,12 +156,16 @@ fig, ax = plt.subplots(nrows, ncols, sharex='all', sharey='all')
 
 q_levels = [.05, .15, .25, .35, .45, .55, .65, .75, .85, .95]
 for ql in q_levels:
-    q = quantile_fun(x, ql)
+    _, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=ql)
+    q = quantile_fun(x)
     ax[0,0].plot(x.numpy(), q.numpy())
     ax[1, 0].plot(x.numpy(), q.numpy())
 
-q_act1 = quantile_fun(x, quantile_level)
-q_act2 = quantile_fun(x, 1. - quantile_level)
+_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=quantile_level)
+q_act1 = quantile_fun(x)
+_, quantile_fun = create_gld_trajectory(input_dim=2, lengthscale=0.5, seed=seed, tau=1. - quantile_level)
+q_act2 = quantile_fun(x)
+
 q_act = tf.concat([q_act1, q_act2], axis=-1)
 for row in range(nrows):
     for col in range(ncols):
@@ -134,46 +173,46 @@ for row in range(nrows):
         ax[row, col].scatter(data.query_points.numpy(), data.observations.numpy(), color="black")
 
 # hetQuantile plot
-qhet_mean, qhet_var = qhet_model.predict(x)
+qhet_mean, qhet_var = qhet_model.model_gpflux.predict_f(x)
 ax[0,1].plot(x.numpy(), qhet_mean[:, 0].numpy(), color="green", linewidth=3)
 y_up = qhet_mean[:, 0].numpy() + 1.96 * np.sqrt(qhet_var[:, 0].numpy())
 y_lo = qhet_mean[:, 0].numpy() - 1.96 * np.sqrt(qhet_var[:, 0].numpy())
 ax[0,1].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="green")
 
-qhet_mean, qhet_var = qhet_model2.predict(x)
+qhet_mean, qhet_var = qhet_model2.model_gpflux.predict_f(x)
 ax[1,1].plot(x.numpy(), qhet_mean[:, 0].numpy(), color="green", linewidth=3)
 y_up = qhet_mean[:, 0].numpy() + 1.96 * np.sqrt(qhet_var[:, 0].numpy())
 y_lo = qhet_mean[:, 0].numpy() - 1.96 * np.sqrt(qhet_var[:, 0].numpy())
 ax[1,1].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="green")
 
-# hetGP plot
-hetgp_mean, hetgp_var = hetgp.predict(x)
-lik_layer = hetgp.model_gpflux.likelihood_layer
-dist = lik_layer.likelihood.conditional_distribution(hetgp_mean)
-hetgp_qpred = dist.quantile(value=quantile_level)
-ax[0, 2].plot(x.numpy(), hetgp_qpred[:, 0].numpy(), color="orange", linewidth=3)
-
-def quantile_traj_from_hetgp(model, at, qlevel):
-    trajectory = model.sample_trajectory()
-    lik_layer = model.model_gpflux.likelihood_layer
-    dist = lik_layer.likelihood.conditional_distribution(trajectory(at))
-    return dist.quantile(value=qlevel)
-
-for i in range(10):
-    hetgp_traj = quantile_traj_from_hetgp(hetgp, x, quantile_level)
-    ax[0,2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
-    hetgp_traj = quantile_traj_from_hetgp(hetgp, x, 1. - quantile_level)
-    ax[1, 2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
+# # hetGP plot
+# hetgp_mean, hetgp_var = hetgp.model_gpflux.predict_f(x)
+# lik_layer = hetgp.model_gpflux.likelihood_layer
+# dist = lik_layer.likelihood.conditional_distribution(hetgp_mean)
+# hetgp_qpred = dist.quantile(value=quantile_level)
+# ax[0, 2].plot(x.numpy(), hetgp_qpred[:, 0].numpy(), color="orange", linewidth=3)
+#
+# def quantile_traj_from_hetgp(model, at, qlevel):
+#     trajectory = model.sample_trajectory()
+#     lik_layer = model.model_gpflux.likelihood_layer
+#     dist = lik_layer.likelihood.conditional_distribution(trajectory(at))
+#     return dist.quantile(value=qlevel)
+#
+# for i in range(10):
+#     hetgp_traj = quantile_traj_from_hetgp(hetgp, x, quantile_level)
+#     ax[0,2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
+#     hetgp_traj = quantile_traj_from_hetgp(hetgp, x, 1. - quantile_level)
+#     ax[1, 2].plot(x.numpy(), hetgp_traj[:, 0].numpy(), color="orange", linewidth=1)
 
 
 # homGP plot
-qhom_mean, qhom_var = qhom_model.predict(x)
+qhom_mean, qhom_var = qhom_model.model_gpflux.predict_f(x)
 ax[0,3].plot(x.numpy(), qhom_mean[:, 0].numpy(), color="blue", linewidth=3)
 y_up = qhom_mean[:, 0].numpy() + 1.96 * np.sqrt(qhom_var[:, 0].numpy())
 y_lo = qhom_mean[:, 0].numpy() - 1.96 * np.sqrt(qhom_var[:, 0].numpy())
 ax[0,3].fill_between(x.numpy().flatten(), y_up.flatten(), y_lo.flatten(), alpha=0.3, color="blue")
 
-qhom_mean, qhom_var = qhom_model2.predict(x)
+qhom_mean, qhom_var = qhom_model2.model_gpflux.predict_f(x)
 ax[1,3].plot(x.numpy(), qhom_mean[:, 0].numpy(), color="blue", linewidth=3)
 y_up = qhom_mean[:, 0].numpy() + 1.96 * np.sqrt(qhom_var[:, 0].numpy())
 y_lo = qhom_mean[:, 0].numpy() - 1.96 * np.sqrt(qhom_var[:, 0].numpy())
